@@ -1,6 +1,5 @@
 package be.nabu.utils.security.impl;
 
-import java.io.IOException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -12,7 +11,6 @@ import java.security.cert.X509Certificate;
 
 import javax.crypto.SecretKey;
 
-import be.nabu.utils.io.api.IORuntimeException;
 import be.nabu.utils.security.KeyStoreHandler;
 import be.nabu.utils.security.StoreType;
 import be.nabu.utils.security.api.ManagedKeyStore;
@@ -55,9 +53,6 @@ public class SimpleManagedKeyStore implements ManagedKeyStore {
 		}
 		catch (NoSuchProviderException e) {
 			throw new RuntimeException(e);
-		}
-		catch (IOException e) {
-			throw new IORuntimeException(e);
 		}
 	}
 	

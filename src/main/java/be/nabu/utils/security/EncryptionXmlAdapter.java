@@ -59,7 +59,7 @@ public class EncryptionXmlAdapter extends XmlAdapter<String, String> {
 	@Override
 	public String marshal(String v) throws Exception {
 		byte [] encrypted = getEncryptionCipher().doFinal(v.getBytes("UTF-8"));
-		byte [] encoded = IOUtils.toBytes(TranscoderUtils.transcode(
+		byte [] encoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
 			IOUtils.wrap(encrypted, true), 
 			new Base64Encoder())
 		);
@@ -69,7 +69,7 @@ public class EncryptionXmlAdapter extends XmlAdapter<String, String> {
 	@Override
 	public String unmarshal(String v) throws Exception {
 		if (v.startsWith("${encrypted:") && v.endsWith("}")) {
-			byte [] decoded = IOUtils.toBytes(TranscoderUtils.transcode(
+			byte [] decoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
 				IOUtils.wrap(v.substring(12, v.length() - 1).getBytes("ASCII"), true), 
 				new Base64Decoder())
 			);

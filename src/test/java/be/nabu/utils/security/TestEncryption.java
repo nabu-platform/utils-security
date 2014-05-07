@@ -1,5 +1,7 @@
 package be.nabu.utils.security;
 
+import static be.nabu.utils.io.IOUtils.*;
+
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
@@ -11,8 +13,8 @@ import junit.framework.TestCase;
 import be.nabu.utils.codec.TranscoderUtils;
 import be.nabu.utils.codec.impl.Base64Decoder;
 import be.nabu.utils.codec.impl.Base64Encoder;
-import be.nabu.utils.io.IOUtils;
-import be.nabu.utils.io.api.ByteContainer;
+import be.nabu.utils.io.api.ByteBuffer;
+import be.nabu.utils.io.api.Container;
 import be.nabu.utils.security.api.ManagedKeyStore;
 import be.nabu.utils.security.impl.SimpleManagedKeyStore;
 
@@ -27,36 +29,36 @@ public class TestEncryption extends TestCase {
 		
 		// you can only test aes256 with unrestricted policy files on
 		// otherwise you get an "illegal key size" exception
-		ByteContainer container = IOUtils.newByteContainer();
-		container = IOUtils.wrap(
+		Container<ByteBuffer> container = newByteBuffer();
+		container = wrap(
 			container,
-			BCSecurityUtils.encrypt(container, SynchronousEncryptionAlgorithm.AES128_CBC, certificate)
+			wrap(BCSecurityUtils.encrypt(toOutputStream(container), SynchronousEncryptionAlgorithm.AES128_CBC, certificate))
 		);
-		container.write(content.getBytes("ASCII"));
+		container.write(wrap(content.getBytes("ASCII"), true));
 		container.close();
-		byte [] encrypted = IOUtils.toBytes(container);
+		byte [] encrypted = toBytes(container);
 	
 		// decrypt it with the given key
-		container = IOUtils.newByteContainer();
+		container = newByteBuffer();
 		// the encrypted data has to be present _before_ it is wrapped in a decryption stream
 		// otherwise you get a npe likely because the decrypting wrapper reads some initial data to parse things like sender/receivers
-		container.write(encrypted);
-		container = IOUtils.wrap(
-			BCSecurityUtils.decrypt(container, pair.getPrivate()),
+		container.write(wrap(encrypted, true));
+		container = wrap(
+			wrap(BCSecurityUtils.decrypt(toInputStream(container), pair.getPrivate())),
 			container
 		);
-		assertEquals(content, new String(IOUtils.toBytes(container)));
+		assertEquals(content, new String(toBytes(container)));
 		
 		// decrypt it with a keystore
 		ManagedKeyStore managedStore = new SimpleManagedKeyStore();
 		managedStore.set("wee", pair.getPrivate(), new X509Certificate [] { certificate }, null);
-		container = IOUtils.newByteContainer();
-		container.write(encrypted);
-		container = IOUtils.wrap(
-			BCSecurityUtils.decrypt(container, managedStore),
+		container = newByteBuffer();
+		container.write(wrap(encrypted, true));
+		container = wrap(
+			wrap(BCSecurityUtils.decrypt(toInputStream(container), managedStore)),
 			container
 		);
-		assertEquals(content, new String(IOUtils.toBytes(container)));
+		assertEquals(content, new String(toBytes(container)));
 	}
 	
 	public void testEncryptionWithBase64() throws IOException, GeneralSecurityException {
@@ -66,22 +68,30 @@ public class TestEncryption extends TestCase {
 		
 		String content = "----- slightly larger test with stuff in it---------";
 		
-		ByteContainer container = IOUtils.newByteContainer();
-		container = IOUtils.wrap(
+		Container<ByteBuffer> container = newByteBuffer();
+		container = wrap(
 			container,
-			BCSecurityUtils.encrypt(container, SynchronousEncryptionAlgorithm.AES128_CBC, certificate)
+			wrap(BCSecurityUtils.encrypt(toOutputStream(container), SynchronousEncryptionAlgorithm.AES128_CBC, certificate))
 		);
-		container.write(content.getBytes("ASCII"));
+		container.write(wrap(content.getBytes("ASCII"), true));
 		container.close();
-		byte [] encrypted = IOUtils.toBytes(container);
-		byte [] encoded = IOUtils.toBytes(TranscoderUtils.wrapInput(IOUtils.wrap(encrypted), new Base64Encoder()));
+		byte [] encrypted = toBytes(container);
+		byte [] encoded = toBytes(TranscoderUtils.wrapReadable(wrap(encrypted, true), new Base64Encoder()));
 		
 		ManagedKeyStore managedStore = new SimpleManagedKeyStore();
 		managedStore.set("wee", pair.getPrivate(), new X509Certificate [] { certificate }, "test");
-		container = IOUtils.newByteContainer();
+		container = newByteBuffer();
 		// BCSecurityUtils.decrypt(container, managedStore)
-		IOUtils.copy(BCSecurityUtils.decrypt(TranscoderUtils.wrapInput(IOUtils.wrap(encoded), new Base64Decoder()), managedStore), container);
+		copyBytes(
+			wrap(
+				BCSecurityUtils.decrypt(
+					toInputStream(TranscoderUtils.wrapReadable(wrap(encoded, true), new Base64Decoder())),
+					managedStore
+				)
+			), 
+			container
+		);		
 		container.close();
-		assertEquals(content, new String(IOUtils.toBytes(container)));
+		assertEquals(content, new String(toBytes(container)));
 	}
 }

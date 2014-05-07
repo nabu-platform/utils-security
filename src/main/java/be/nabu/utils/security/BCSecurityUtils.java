@@ -3,7 +3,9 @@ package be.nabu.utils.security;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Reader;
 import java.io.UnsupportedEncodingException;
+import java.io.Writer;
 import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.security.GeneralSecurityException;
@@ -114,11 +116,8 @@ import org.bouncycastle.util.Store;
 import be.nabu.utils.codec.TranscoderUtils;
 import be.nabu.utils.codec.impl.Base64Encoder;
 import be.nabu.utils.io.IOUtils;
-import be.nabu.utils.io.api.ByteContainer;
-import be.nabu.utils.io.api.ReadableByteContainer;
-import be.nabu.utils.io.api.ReadableCharContainer;
-import be.nabu.utils.io.api.WritableByteContainer;
-import be.nabu.utils.io.api.WritableCharContainer;
+import be.nabu.utils.io.api.ByteBuffer;
+import be.nabu.utils.io.api.ReadableContainer;
 import be.nabu.utils.security.SecurityUtils.DigestGenerator;
 import be.nabu.utils.security.api.ManagedKeyStore;
 
@@ -165,7 +164,7 @@ public class BCSecurityUtils {
 //		return IOUtils.wrap(request.getEncoded(), true);
 //	}
 	
-	public static ReadableByteContainer generatePKCS10(KeyPair pair, SignatureType type, X500Principal subject) throws IOException {
+	public static byte[] generatePKCS10(KeyPair pair, SignatureType type, X500Principal subject) throws IOException {
 		PKCS10CertificationRequestBuilder builder = new JcaPKCS10CertificationRequestBuilder(
 			subject,
 			pair.getPublic()
@@ -179,7 +178,7 @@ public class BCSecurityUtils {
 			PKCS10CertificationRequest csr = builder.build(signer);
 			ContentVerifierProvider verifier = new JcaContentVerifierProviderBuilder().setProvider("BC").build(pair.getPublic());
 			csr.isSignatureValid(verifier);
-			return IOUtils.wrap(csr.getEncoded(), true);
+			return csr.getEncoded();
 		}
 		catch (OperatorCreationException e) {
 			throw new IOException(e);
@@ -189,7 +188,7 @@ public class BCSecurityUtils {
 		}
 	}
 	
-	public static X500Principal getPKCS10Subject(ReadableCharContainer csr) throws IOException {
+	public static X500Principal getPKCS10Subject(Reader csr) throws IOException {
 		return new X500Principal(parsePKCS10(csr).getSubject().toString());
 	}
 	
@@ -197,8 +196,8 @@ public class BCSecurityUtils {
 	 * The parser only works with the base64 encoded version of the csr
 	 * Passing in the csr as decoded binary will result in readObject() returning null (no exception)
 	 */
-	public static PKCS10CertificationRequest parsePKCS10(ReadableCharContainer csr) throws IOException {
-		PEMParser parser = new PEMParser(IOUtils.toReader(csr));
+	public static PKCS10CertificationRequest parsePKCS10(Reader csr) throws IOException {
+		PEMParser parser = new PEMParser(csr);
 		try {
 			return (PKCS10CertificationRequest) parser.readObject();
 		}
@@ -207,11 +206,11 @@ public class BCSecurityUtils {
 		}
 	}
 	
-	public static void encodePKCS10(ReadableByteContainer csr, WritableCharContainer output) throws UnsupportedEncodingException, IOException {
+	public static void encodePKCS10(InputStream csr, Writer output) throws UnsupportedEncodingException, IOException {
 		output.write("-----BEGIN CERTIFICATE REQUEST-----\n".toCharArray());
-		ReadableByteContainer encoded = TranscoderUtils.transcode(csr, new Base64Encoder());
+		ReadableContainer<ByteBuffer> encoded = TranscoderUtils.transcodeBytes(IOUtils.wrap(csr), new Base64Encoder());
 		// this makes a string out of it and adds linefeeds
-		output.write(IOUtils.toString(IOUtils.wrap(encoded, Charset.forName("ASCII")))
+		output.write(IOUtils.toString(IOUtils.wrapReadable(encoded, Charset.forName("ASCII")))
 			.replaceAll("([\\w/+=]{77})", "$1\n")
 			.toCharArray());
 		output.write("\n-----END CERTIFICATE REQUEST-----".toCharArray());
@@ -236,10 +235,10 @@ public class BCSecurityUtils {
 		}
 	}
 	
-	public static X509Certificate signPKCS10(ReadableByteContainer csr, Date until, X500Principal issuer, PrivateKey privateKey) throws IOException, CertificateException, InvalidKeyException, NoSuchAlgorithmException {
+	public static X509Certificate signPKCS10(byte [] csr, Date until, X500Principal issuer, PrivateKey privateKey) throws IOException, CertificateException, InvalidKeyException, NoSuchAlgorithmException {
 		return signPKCS10(csr, until, issuer, privateKey, SignatureType.SHA1WITHRSA);
 	}
-	public static X509Certificate signPKCS10(ReadableByteContainer csr, Date until, X500Principal issuer, PrivateKey privateKey, SignatureType type) throws IOException, CertificateException, InvalidKeyException, NoSuchAlgorithmException {
+	public static X509Certificate signPKCS10(byte [] csr, Date until, X500Principal issuer, PrivateKey privateKey, SignatureType type) throws IOException, CertificateException, InvalidKeyException, NoSuchAlgorithmException {
 		// the conversion from X500Principal to X500Name is NOT correct in the below commented part
 //		PKCS10CertificationRequest pkcs10 = new PKCS10CertificationRequest(IOUtils.toBytes(csr));
 //		X509v3CertificateBuilder builder = new X509v3CertificateBuilder(
@@ -251,7 +250,7 @@ public class BCSecurityUtils {
 //				pkcs10.getSubjectPublicKeyInfo()
 //		);
 		// so let's do it the JCA way
-		JcaPKCS10CertificationRequest pkcs10 = new JcaPKCS10CertificationRequest(IOUtils.toBytes(csr));
+		JcaPKCS10CertificationRequest pkcs10 = new JcaPKCS10CertificationRequest(csr);
 		X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
 				issuer,
 				SecurityUtils.generateSerialId(),
@@ -290,13 +289,10 @@ public class BCSecurityUtils {
 //		SubjectPublicKeyInfo info = SubjectPublicKeyInfo.getInstance(publicKey);
 	}
 	
-	public static KeyStoreHandler generateNewCSR(KeyPair pair, X500Principal subject, SignatureType signatureType, WritableByteContainer csr, String password) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, NoSuchProviderException, IOException {
+	public static KeyStoreHandler generateNewCSR(KeyPair pair, X500Principal subject, SignatureType signatureType, OutputStream csr, String password) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, NoSuchProviderException, IOException {
 		KeyStoreHandler selfHandler = KeyStoreHandler.create(password, StoreType.PKCS12);
-		ByteContainer container = IOUtils.newByteContainer();
-		IOUtils.copy(BCSecurityUtils.generatePKCS10(pair, signatureType, subject), container);
-		byte [] content = IOUtils.toBytes(container);
 //		BCSecurityUtils.signPKCS10(IOUtils.wrap(content, true), until, issuer, privateKey)
-		csr.write(content);
+		csr.write(BCSecurityUtils.generatePKCS10(pair, signatureType, subject));
 		return selfHandler;
 	}
 //	
@@ -341,14 +337,14 @@ public class BCSecurityUtils {
 	/**
 	 * Use this if the signatures are not encapsulated. Provide the necessary signatures in the second parameter
 	 */
-	public static CertPath verify(ReadableByteContainer unencapsulatedSignedData, ReadableByteContainer signatures, CertStore certsAndCRLs, X509Certificate...trustedRootCertificates) throws GeneralSecurityException, IOException {
+	public static CertPath verify(InputStream unencapsulatedSignedData, byte [] signatures, CertStore certsAndCRLs, X509Certificate...trustedRootCertificates) throws GeneralSecurityException, IOException {
 		try {
 //			CMSSignedData cmsSignedData = new CMSSignedData(IOUtils.toInputStream(signedData));
 			DigestGenerator digestGenerator = new DigestGenerator(DigestAlgorithm.SHA1, DigestAlgorithm.SHA256, DigestAlgorithm.SHA512, DigestAlgorithm.MD5);
-			IOUtils.copy(unencapsulatedSignedData, digestGenerator);
+			IOUtils.copyBytes(IOUtils.wrap(unencapsulatedSignedData), digestGenerator);
 			digestGenerator.close();
 //			CMSSignedData cmsSignedData = new CMSSignedData(getDigests(data, certsAndCRLs), IOUtils.toBytes(signatures));
-			CMSSignedData cmsSignedData = new CMSSignedData(digestGenerator.getDigestsByOID(), IOUtils.toBytes(signatures));
+			CMSSignedData cmsSignedData = new CMSSignedData(digestGenerator.getDigestsByOID(), signatures);
 			return verify(cmsSignedData, certsAndCRLs, trustedRootCertificates);
 		}
 		catch (CMSException e) {
@@ -359,9 +355,9 @@ public class BCSecurityUtils {
 	/**
 	 * Use this if the signatures are encapsulated into the signed data
 	 */
-	public static CertPath verify(ReadableByteContainer encapsulatedSignedData, CertStore certsAndCRLs, X509Certificate...trustedRootCertificates) throws GeneralSecurityException, IOException {
+	public static CertPath verify(InputStream encapsulatedSignedData, CertStore certsAndCRLs, X509Certificate...trustedRootCertificates) throws GeneralSecurityException, IOException {
 		try {
-			return verify(new CMSSignedData(IOUtils.toInputStream(encapsulatedSignedData)), certsAndCRLs, trustedRootCertificates);
+			return verify(new CMSSignedData(encapsulatedSignedData), certsAndCRLs, trustedRootCertificates);
 		}
 		catch (CMSException e) {
 			throw new GeneralSecurityException(e);
@@ -390,10 +386,10 @@ public class BCSecurityUtils {
 	}
 	
 	@SuppressWarnings("unchecked")
-	public static CertPath verify2(ReadableByteContainer signatures, CertStore certsAndCRLs, X509Certificate...trustedRootCertificates) throws GeneralSecurityException {
+	public static CertPath verify2(byte [] signatures, CertStore certsAndCRLs, X509Certificate...trustedRootCertificates) throws GeneralSecurityException {
 		try {
 //			CMSSignedData cmsSignedData = new CMSSignedData(IOUtils.toInputStream(signedData));
-			CMSSignedData cmsSignedData = new CMSSignedData(IOUtils.toBytes(signatures));
+			CMSSignedData cmsSignedData = new CMSSignedData(signatures);
 			Store store = cmsSignedData.getCertificates();
 			SignerInformationStore signers = cmsSignedData.getSignerInfos();
 			for (SignerInformation signer : (Collection<SignerInformation>) signers.getSigners()) {
@@ -444,18 +440,18 @@ public class BCSecurityUtils {
 		return identifiers;
 	}
 
-	public static SignedWritableByteContainer sign(WritableByteContainer output, SignerInfoGenerator [] signers, boolean encapsulate, CertStore...certStores) throws GeneralSecurityException, IOException {
+	public static SignedOutputStream sign(OutputStream output, SignerInfoGenerator [] signers, boolean encapsulate, CertStore...certStores) throws GeneralSecurityException, IOException {
 		CMSSignedDataStreamGenerator streamGenerator = createSignatureGenerator(signers, certStores);
 		// for s/mime (currently our only target), the data should never be encapsulated (forgot where I read this, may be untrue!)
-		OutputStream signedOutput = streamGenerator.open(IOUtils.toOutputStream(output), encapsulate);
-		return new SignedWritableByteContainer(IOUtils.wrap(signedOutput), streamGenerator);
+		OutputStream signedOutput = streamGenerator.open(output, encapsulate);
+		return new SignedOutputStream(signedOutput, streamGenerator);
 	}
 	
 	/**
 	 * This does not work though i have no idea why
 	 * The resulting map is always empty
 	 */
-	static Map<String, byte[]> getDigests(ReadableByteContainer data, CertStore...certStores) throws GeneralSecurityException, IOException {
+	static Map<String, byte[]> getDigests(InputStream data, CertStore...certStores) throws GeneralSecurityException, IOException {
 		try {
 			CMSSignedDataStreamGenerator generator = new CMSSignedDataStreamGenerator();
 			for (CertStore certStore : certStores) {
@@ -463,8 +459,8 @@ public class BCSecurityUtils {
 				generator.addCRLs(convertToCRLStore(certStore));
 			}
 			OutputStream signedOutput = generator.open(IOUtils.toOutputStream(IOUtils.newByteSink()), false);
-			SignedWritableByteContainer output = new SignedWritableByteContainer(IOUtils.wrap(signedOutput), generator); 
-			IOUtils.copy(data, output);
+			SignedOutputStream output = new SignedOutputStream(signedOutput, generator); 
+			IOUtils.copyBytes(IOUtils.wrap(data), IOUtils.wrap(output));
 			output.close();
 			return output.getDigests();
 		}
@@ -557,13 +553,14 @@ public class BCSecurityUtils {
 		}
 	}
 	
-	public static class SignedWritableByteContainer implements WritableByteContainer {
+	public static class SignedOutputStream extends OutputStream {
 
-		private WritableByteContainer parent;
+		private OutputStream parent;
 		private CMSSignedDataStreamGenerator generator;
 		private boolean closed = false;
+		private byte [] single = new byte[1];
 		
-		SignedWritableByteContainer(WritableByteContainer signedParent, CMSSignedDataStreamGenerator generator) {
+		SignedOutputStream(OutputStream signedParent, CMSSignedDataStreamGenerator generator) {
 			this.parent = signedParent;
 			this.generator = generator;
 		}
@@ -571,24 +568,24 @@ public class BCSecurityUtils {
 		@Override
 		public void close() throws IOException {
 			if (!closed) {
-				parent.close();
 				closed = true;
+				parent.close();
 			}
 		}
 
 		@Override
-		public void flush() {
+		public void flush() throws IOException {
 			parent.flush();
 		}
 
 		@Override
-		public int write(byte[] bytes) {
-			return parent.write(bytes);
+		public void write(byte[] bytes) throws IOException {
+			parent.write(bytes);
 		}
 
 		@Override
-		public int write(byte[] bytes, int offset, int length) {
-			return parent.write(bytes, offset, length);
+		public void write(byte[] bytes, int offset, int length) throws IOException {
+			parent.write(bytes, offset, length);
 		}
 		
 		/**
@@ -599,41 +596,47 @@ public class BCSecurityUtils {
 		public Map<String, byte[]> getDigests() {
 			return closed ? generator.getGeneratedDigests() : null;
 		}
+
+		@Override
+		public void write(int i) throws IOException {
+			single[0] = (byte) i;
+			write(single);
+		}
 	}
 	
-	public static WritableByteContainer compress(WritableByteContainer output) throws IOException {
+	public static OutputStream compress(OutputStream output) throws IOException {
 		CMSCompressedDataStreamGenerator generator = new CMSCompressedDataStreamGenerator();
 		// in theory the compressor can be any OutputCompressor, but in practic eonly zlib is currently implemented
-		OutputStream compressedOutput = generator.open(IOUtils.toOutputStream(output), new ZlibCompressor());
-		return IOUtils.wrap(compressedOutput);
+		OutputStream compressedOutput = generator.open(output, new ZlibCompressor());
+		return compressedOutput;
 	}
 	
-	public static ReadableByteContainer decompress(ReadableByteContainer container) throws GeneralSecurityException {
+	public static InputStream decompress(InputStream container) throws GeneralSecurityException {
 		try {
-			CMSCompressedDataParser parser = new CMSCompressedDataParser(IOUtils.toInputStream(container));
+			CMSCompressedDataParser parser = new CMSCompressedDataParser(container);
 			InputStream input = parser.getContent(new ZlibExpanderProvider()).getContentStream();
-			return IOUtils.wrap(input);
+			return input;
 		}
 		catch (CMSException e) {
 			throw new GeneralSecurityException(e);
 		}
 	}
 	
-	public static WritableByteContainer encrypt(WritableByteContainer output, SynchronousEncryptionAlgorithm algorithm, X509Certificate...recipients) throws GeneralSecurityException, IOException {
+	public static OutputStream encrypt(OutputStream output, SynchronousEncryptionAlgorithm algorithm, X509Certificate...recipients) throws GeneralSecurityException, IOException {
 		CMSEnvelopedDataStreamGenerator generator = new CMSEnvelopedDataStreamGenerator();
 		for (X509Certificate recipient : recipients)
 			generator.addRecipientInfoGenerator(new JceKeyTransRecipientInfoGenerator(recipient).setProvider("BC"));
 		try {
-			OutputStream encryptedOut = generator.open(IOUtils.toOutputStream(output), 
+			OutputStream encryptedOut = generator.open(output, 
 				new JceCMSContentEncryptorBuilder(algorithm.getIdentifier()).setProvider("BC").build());
-			return IOUtils.wrap(encryptedOut);
+			return encryptedOut;
 		}
 		catch (CMSException e) {
 			throw new GeneralSecurityException(e);
 		}
 	}
 	
-	public static ReadableByteContainer decrypt(ReadableByteContainer input, PrivateKey privateKey) throws GeneralSecurityException, IOException {
+	public static InputStream decrypt(InputStream input, PrivateKey privateKey) throws GeneralSecurityException, IOException {
 		return decrypt(input, privateKey, null);
 	}
 	
@@ -643,9 +646,9 @@ public class BCSecurityUtils {
 	 * Note that not all recipient types support serialId selection!
 	 */
 	@SuppressWarnings("unchecked")
-	public static ReadableByteContainer decrypt(ReadableByteContainer input, PrivateKey privateKey, BigInteger serialId) throws GeneralSecurityException, IOException {
+	public static InputStream decrypt(InputStream input, PrivateKey privateKey, BigInteger serialId) throws GeneralSecurityException, IOException {
 		try {
-			CMSEnvelopedDataParser parser = new CMSEnvelopedDataParser(IOUtils.toInputStream(input));
+			CMSEnvelopedDataParser parser = new CMSEnvelopedDataParser(input);
 			RecipientInformationStore recipients = parser.getRecipientInfos();
 			for (RecipientInformation recipient : (Collection<RecipientInformation>) recipients.getRecipients()) {
 				// check if it is you
@@ -672,11 +675,11 @@ public class BCSecurityUtils {
 	}
 	
 	@SuppressWarnings("unchecked")
-	public static ReadableByteContainer decrypt(ReadableByteContainer input, ManagedKeyStore managedKeyStore) throws GeneralSecurityException, IOException {
+	public static InputStream decrypt(InputStream input, ManagedKeyStore managedKeyStore) throws GeneralSecurityException, IOException {
 		try {
 			KeyStoreHandler handler = new KeyStoreHandler(managedKeyStore.getKeyStore());
 			List<String> aliases = handler.getPrivateKeyAliases();
-			CMSEnvelopedDataParser parser = new CMSEnvelopedDataParser(IOUtils.toInputStream(input));
+			CMSEnvelopedDataParser parser = new CMSEnvelopedDataParser(input);
 			RecipientInformationStore recipients = parser.getRecipientInfos();
 			for (RecipientInformation recipient : (Collection<RecipientInformation>) recipients.getRecipients()) {
 				RecipientId recipientId = recipient.getRID();
@@ -709,9 +712,9 @@ public class BCSecurityUtils {
 		}
 	}
 	
-	private static ReadableByteContainer decrypt(RecipientInformation recipient, PrivateKey privateKey) throws GeneralSecurityException, IOException, CMSException {
+	private static InputStream decrypt(RecipientInformation recipient, PrivateKey privateKey) throws GeneralSecurityException, IOException, CMSException {
 		CMSTypedStream typedStream = recipient.getContentStream(new JceKeyTransEnvelopedRecipient(privateKey).setProvider("BC"));
-		return IOUtils.wrap(typedStream.getContentStream());
+		return typedStream.getContentStream();
 	}
 
 }

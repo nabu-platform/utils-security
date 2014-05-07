@@ -1,6 +1,8 @@
 package be.nabu.utils.security;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
@@ -30,10 +32,6 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509KeyManager;
 
-import be.nabu.utils.io.IOUtils;
-import be.nabu.utils.io.api.ReadableByteContainer;
-import be.nabu.utils.io.api.WritableByteContainer;
-
 /**
  * This encapsulates the logic necessary to use a java keystore
  * 
@@ -42,13 +40,18 @@ import be.nabu.utils.io.api.WritableByteContainer;
  */
 public class KeyStoreHandler {
 	
-	public static KeyStoreHandler create(String password, StoreType type) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, NoSuchProviderException, IOException {
-		return load(null, password, type);
+	public static KeyStoreHandler create(String password, StoreType type) throws NoSuchAlgorithmException, CertificateException, KeyStoreException, NoSuchProviderException {
+		try {
+			return load(null, password, type);
+		}
+		catch (IOException e) {
+			throw new RuntimeException(e);
+		}
 	}
 	
-	public static KeyStoreHandler load(ReadableByteContainer input, String password, StoreType type) throws NoSuchAlgorithmException, CertificateException, IOException, KeyStoreException, NoSuchProviderException {
+	public static KeyStoreHandler load(InputStream input, String password, StoreType type) throws NoSuchAlgorithmException, CertificateException, IOException, KeyStoreException, NoSuchProviderException {
 		KeyStore keystore = type.getProvider() == null ? KeyStore.getInstance(type.getAlias()) : KeyStore.getInstance(type.getAlias(), type.getProvider());
-		keystore.load(input == null ? null : IOUtils.toInputStream(input), (password == null ? "" : password).toCharArray());
+		keystore.load(input == null ? null : input, (password == null ? "" : password).toCharArray());
 		return new KeyStoreHandler(keystore);
 	}
 	
@@ -58,8 +61,8 @@ public class KeyStoreHandler {
 		this.store = store;
 	}
 	
-	public void save(WritableByteContainer output, String password) throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException {
-		store.store(IOUtils.toOutputStream(output), (password == null ? "" : password).toCharArray());
+	public void save(OutputStream output, String password) throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException {
+		store.store(output, (password == null ? "" : password).toCharArray());
 	}
 	
 	public void set(String alias, X509Certificate certificate) throws KeyStoreException {

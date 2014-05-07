@@ -1,5 +1,6 @@
 package be.nabu.utils.security;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
@@ -8,10 +9,10 @@ import java.util.Date;
 
 import javax.security.auth.x500.X500Principal;
 
+import be.nabu.utils.io.api.ByteBuffer;
+import be.nabu.utils.io.api.Container;
 import junit.framework.TestCase;
-import be.nabu.utils.io.IOUtils;
-import be.nabu.utils.io.api.ByteContainer;
-import be.nabu.utils.io.api.ReadableByteContainer;
+import static be.nabu.utils.io.IOUtils.*;
 
 public class TestSigning extends TestCase {
 	
@@ -21,22 +22,22 @@ public class TestSigning extends TestCase {
 		X509Certificate certificate = BCSecurityUtils.generateSelfSignedCertificate(pair, yearLong(), issuer, issuer);
 		
 		String data = "MIME-Version: 1.0\r\nContent-Type: text/plain;\r\n\r\nthis is a test";
-		ByteContainer container = IOUtils.newByteContainer();
-		container = IOUtils.wrap(
+		Container<ByteBuffer> container = newByteBuffer();
+		container = wrap(
 			container,
-			BCSecurityUtils.sign(container, BCSecurityUtils.createSignerStore(
+			wrap(BCSecurityUtils.sign(toOutputStream(container), BCSecurityUtils.createSignerStore(
 				BCSecurityUtils.createSigner(pair.getPrivate(), certificate, SignatureType.SHA1WITHRSA)
-			), false)
+			), false))
 		);
-		container.write(data.getBytes("ASCII"));
+		container.write(wrap(data.getBytes("ASCII"), true));
 		container.close();
 		
 		// this contains the signature(s) of the data
-		byte [] signatures = IOUtils.toBytes(container);
+		byte [] signatures = toBytes(container);
 		
 		assertNotNull(BCSecurityUtils.verify(
-				IOUtils.wrap(data.getBytes("ASCII"), true), 
-				IOUtils.wrap(signatures, true), 
+				new ByteArrayInputStream(data.getBytes("ASCII")), 
+				signatures, 
 				BCSecurityUtils.createCertificateStore(new X509Certificate[] { certificate }), 
 				certificate));
 	}
@@ -49,28 +50,28 @@ public class TestSigning extends TestCase {
 		// user
 		X500Principal subject = SecurityUtils.createX500Principal("testUser", null, null, null, "Antwerp", "Belgium");
 		KeyPair userPair = SecurityUtils.generateKeyPair(KeyPairType.RSA, 1024);
-		ReadableByteContainer csr = BCSecurityUtils.generatePKCS10(userPair, SignatureType.SHA1WITHRSA, subject);
+		byte [] csr = BCSecurityUtils.generatePKCS10(userPair, SignatureType.SHA1WITHRSA, subject);
 		// sign user with ca
 		X509Certificate user = BCSecurityUtils.signPKCS10(csr, yearLong(), issuer, caPair.getPrivate());
 		
 		String data = "this is my data that serves as a test of signature generation and verification";
-		ByteContainer container = IOUtils.newByteContainer();
+		Container<ByteBuffer> container = newByteBuffer();
 		
-		container = IOUtils.wrap(
+		container = wrap(
 			container,
-			BCSecurityUtils.sign(container, BCSecurityUtils.createSignerStore(
+			wrap(BCSecurityUtils.sign(toOutputStream(container), BCSecurityUtils.createSignerStore(
 				BCSecurityUtils.createSigner(userPair.getPrivate(), user, SignatureType.SHA1WITHRSA)
-			), false)
+			), false))
 		);
-		container.write(data.getBytes("ASCII"));
+		container.write(wrap(data.getBytes("ASCII"), true));
 		container.close();
 		
 		// this contains the signature(s) of the data
-		byte [] signatures = IOUtils.toBytes(container);
+		byte [] signatures = toBytes(container);
 		
 		assertNotNull(BCSecurityUtils.verify(
-				IOUtils.wrap(data.getBytes("ASCII"), true), 
-				IOUtils.wrap(signatures, true), 
+				new ByteArrayInputStream(data.getBytes("ASCII")), 
+				signatures, 
 				BCSecurityUtils.createCertificateStore(new X509Certificate[] { user }), 
 				ca));
 	}
@@ -81,21 +82,21 @@ public class TestSigning extends TestCase {
 		X509Certificate certificate = BCSecurityUtils.generateSelfSignedCertificate(pair, yearLong(), issuer, issuer);
 		
 		String data = "MIME-Version: 1.0\r\nContent-Type: text/plain;\r\n\r\nthis is a test";
-		ByteContainer container = IOUtils.newByteContainer();
-		container = IOUtils.wrap(
+		Container<ByteBuffer> container = newByteBuffer();
+		container = wrap(
 			container,
-			BCSecurityUtils.sign(container, BCSecurityUtils.createSignerStore(
+			wrap(BCSecurityUtils.sign(toOutputStream(container), BCSecurityUtils.createSignerStore(
 				BCSecurityUtils.createSigner(pair.getPrivate(), certificate, SignatureType.SHA1WITHRSA)
-			), true)
+			), true))
 		);
-		container.write(data.getBytes("ASCII"));
+		container.write(wrap(data.getBytes("ASCII"), true));
 		container.close();
 		
 		// this now contains the signed data
-		byte [] signedData = IOUtils.toBytes(container);
+		byte [] signedData = toBytes(container);
 		
 		assertNotNull(BCSecurityUtils.verify(
-				IOUtils.wrap(signedData, true), 
+				new ByteArrayInputStream(signedData), 
 				BCSecurityUtils.createCertificateStore(new X509Certificate[] { certificate }), 
 				certificate));
 	}
@@ -104,5 +105,4 @@ public class TestSigning extends TestCase {
 		return new Date(new Date().getTime() + 1000*60*60*24*365);
 	}
 
-	
 }
