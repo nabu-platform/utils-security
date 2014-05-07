@@ -497,8 +497,9 @@ public class BCSecurityUtils {
 	 * The aliases must point to private keys
 	 * @throws GeneralSecurityException 
 	 * @throws KeyStoreException 
+	 * @throws IOException 
 	 */
-	public static SignerInfoGenerator [] createSignerStore(SignatureType signatureType, ManagedKeyStore keyStore, String...aliases) throws KeyStoreException, GeneralSecurityException {
+	public static SignerInfoGenerator [] createSignerStore(SignatureType signatureType, ManagedKeyStore keyStore, String...aliases) throws KeyStoreException, GeneralSecurityException, IOException {
 		List<SignerInfoGenerator> signers = new ArrayList<SignerInfoGenerator>();
 		for (String alias : aliases)
 			signers.add(createSigner(keyStore.getPrivateKey(alias), keyStore.getChain(alias)[0], signatureType));
