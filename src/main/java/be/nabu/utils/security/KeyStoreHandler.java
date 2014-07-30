@@ -189,21 +189,34 @@ public class KeyStoreHandler {
 		return context;
 	}
 
-	public SSLSocketFactory createTrustSocketFactory(SSLContextType type) throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException, UnrecoverableKeyException {
+	public SSLContext createTrustContext(SSLContextType type) throws KeyManagementException, NoSuchAlgorithmException, KeyStoreException {
 		SSLContext context = SSLContext.getInstance(type.toString());
 		context.init(null, getTrustManagers(), null);
-		return context.getSocketFactory();
+		return context;
 	}
 	
-	public SSLSocketFactory createKeySocketFactory(SSLContextType type, String alias, String keyPassword) throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException, UnrecoverableKeyException {
+	public SSLContext createKeyContext(SSLContextType type, String alias) throws NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException, KeyManagementException {
+		// use the store itself as trust store
+		return createKeyContext(type, alias, store);
+	}
+	
+	public SSLContext createKeyContext(SSLContextType type, String alias, KeyStore trustStore) throws NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException, KeyManagementException {
 		SSLContext context = SSLContext.getInstance(type.toString());
 		KeyManager [] keyManagers = getKeyManagers();
 		for (int i = 0; i < keyManagers.length; i++) {
 			if (keyManagers[i] instanceof X509KeyManager)
 				keyManagers[i] = new AliasKeyManager((X509KeyManager) keyManagers[i], alias);
 		}
-		context.init(keyManagers, null, null);
-		return context.getSocketFactory();
+		context.init(keyManagers, trustStore == null ? null : new KeyStoreHandler(trustStore).getTrustManagers(), null);
+		return context;
+	}
+	
+	public SSLSocketFactory createTrustSocketFactory(SSLContextType type) throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException, UnrecoverableKeyException {
+		return createTrustContext(type).getSocketFactory();
+	}
+	
+	public SSLSocketFactory createKeySocketFactory(SSLContextType type, String alias, String keyPassword) throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException, UnrecoverableKeyException {
+		return createKeyContext(type, alias, null).getSocketFactory();
 	}
 	
 	public TrustManager[] getTrustManagers() throws NoSuchAlgorithmException, KeyStoreException {
