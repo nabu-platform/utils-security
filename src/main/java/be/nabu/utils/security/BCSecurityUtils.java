@@ -217,6 +217,10 @@ public class BCSecurityUtils {
 	}
 	
 	public static X509Certificate generateSelfSignedCertificate(KeyPair pair, Date until, X500Principal issuer, X500Principal subject) throws CertificateException, IOException {
+		return generateSelfSignedCertificate(pair, until, issuer, subject, SignatureType.SHA1WITHRSA);
+	}
+	
+	public static X509Certificate generateSelfSignedCertificate(KeyPair pair, Date until, X500Principal issuer, X500Principal subject, SignatureType signatureType) throws CertificateException, IOException {
 		X509v1CertificateBuilder builder = new JcaX509v1CertificateBuilder(
 			issuer,
 			SecurityUtils.generateSerialId(),
@@ -227,7 +231,7 @@ public class BCSecurityUtils {
 		);
 		
 		try {
-			X509CertificateHolder holder = builder.build(getContentSigner(pair.getPrivate(), SignatureType.SHA1WITHRSA));
+			X509CertificateHolder holder = builder.build(getContentSigner(pair.getPrivate(), signatureType));
 			return getCertificate(holder);
 		}
 		catch (OperatorCreationException e) {
