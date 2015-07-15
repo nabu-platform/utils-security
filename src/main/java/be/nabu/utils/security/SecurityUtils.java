@@ -35,6 +35,7 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
@@ -204,6 +205,10 @@ public class SecurityUtils {
 		CertPath path = factory.generateCertPath(input);
 		X509Certificate[] chain = (X509Certificate[]) path.getCertificates().toArray(new X509Certificate[1]);
 		return chain;
+	}
+	
+	public static CertPath generateCertificatePath(Certificate...certificates) throws CertificateException {
+		return CertificateFactory.getInstance("X.509").generateCertPath(Arrays.asList(certificates));
 	}
 	
 	public static void encodeCertificate(X509Certificate certificate, Writer output) throws CertificateEncodingException, IOException {
