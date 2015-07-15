@@ -207,6 +207,18 @@ public class SecurityUtils {
 		return chain;
 	}
 	
+	/**
+	 * As read here: http://docs.oracle.com/javase/7/docs/technotes/guides/security/certpath/CertPathProgGuide.html
+	 * CertPath.getCertificates() returns:
+	 * The returned List and the Certificates contained within it are immutable, in order to protect the contents of the CertPath object. 
+	 * The ordering of the certificates returned depends on the type. 
+	 * By convention, the certificates in a CertPath object of type X.509 are ordered starting with the target certificate and ending with a certificate issued by the trust anchor. 
+	 * That is, the issuer of one certificate is the subject of the following one. The certificate representing the TrustAnchor should not be included in the certification path. 
+	 * Unvalidated X.509 CertPaths may not follow this convention. 
+	 * PKIX CertPathValidators will detect any departure from these conventions that cause the certification path to be invalid and throw a CertPathValidatorException.
+	 * 
+	 * This means by convention (not enforced) getCertificates().get(0) will be the user certificate followed by any intermediates and eventually the CA
+	 */
 	public static CertPath generateCertificatePath(Certificate...certificates) throws CertificateException {
 		return CertificateFactory.getInstance("X.509").generateCertPath(Arrays.asList(certificates));
 	}
