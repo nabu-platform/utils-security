@@ -368,6 +368,13 @@ public class SecurityUtils {
 		return signature.verify(signatureToVerify);
 	}
 	
+	public static byte [] digest(InputStream input, DigestAlgorithm algorithm) throws NoSuchAlgorithmException, IOException {
+		DigestGenerator generator = new DigestGenerator(algorithm);
+		IOUtils.copyBytes(IOUtils.wrap(input), generator);
+		generator.close();
+		return generator.getDigestsByOID().get(algorithm.getOID());
+	}
+	
 	public static class DigestGenerator implements WritableContainer<ByteBuffer> {
 
 		private Map<DigestAlgorithm, Container<ByteBuffer>> digested = new HashMap<DigestAlgorithm, Container<ByteBuffer>>();
