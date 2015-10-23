@@ -384,7 +384,17 @@ public class SecurityUtils {
 		public DigestGenerator(DigestAlgorithm...algorithms) throws NoSuchAlgorithmException {
 			List<Container<ByteBuffer>> byteContainers = new ArrayList<Container<ByteBuffer>>();
 			for (int i = 0; i < algorithms.length; i++) {
-				Container<ByteBuffer> digest = IOUtils.digest(IOUtils.newByteSink(), MessageDigest.getInstance(algorithms[i].toString())); 
+				// not all algorithms can be found by their oid
+				// possibly related to http://bugs.java.com/bugdatabase/view_bug.do?bug_id=6655774?
+				MessageDigest instance;
+				try {
+					instance = MessageDigest.getInstance(algorithms[i].getOID());
+				}
+				catch (NoSuchAlgorithmException e) {
+					// try by the actual name
+					instance = MessageDigest.getInstance(algorithms[i].getName());
+				}
+				Container<ByteBuffer> digest = IOUtils.digest(IOUtils.newByteSink(), instance); 
 				byteContainers.add(digest);
 				digested.put(algorithms[i], digest);
 			}
