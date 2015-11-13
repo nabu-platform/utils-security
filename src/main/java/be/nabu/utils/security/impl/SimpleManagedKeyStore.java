@@ -10,8 +10,11 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
 import javax.crypto.SecretKey;
+import javax.net.ssl.SSLContext;
 
 import be.nabu.utils.security.KeyStoreHandler;
+import be.nabu.utils.security.SSLContextType;
+import be.nabu.utils.security.SecurityUtils;
 import be.nabu.utils.security.StoreType;
 import be.nabu.utils.security.api.ManagedKeyStore;
 
@@ -135,6 +138,16 @@ public class SimpleManagedKeyStore implements ManagedKeyStore {
 	@Override
 	public void save() {
 		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public SSLContext newContext(SSLContextType type) throws KeyStoreException {
+		try {
+			return SecurityUtils.createSSLContext(type, SecurityUtils.createKeyManagers(handler.getKeyStore(), null), SecurityUtils.createTrustManagers(handler.getKeyStore()));
+		}
+		catch (Exception e) {
+			throw new KeyStoreException("Failed to create new context", e);
+		}
 	}
 
 }
