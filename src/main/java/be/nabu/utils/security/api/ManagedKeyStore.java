@@ -7,6 +7,9 @@ import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 
 import javax.crypto.SecretKey;
+import javax.net.ssl.SSLContext;
+
+import be.nabu.utils.security.SSLContextType;
 
 public interface ManagedKeyStore {
 	
@@ -25,4 +28,5 @@ public interface ManagedKeyStore {
 	public KeyStore getKeyStore();
 	public void save() throws IOException;
 	
+	public SSLContext newContext(SSLContextType type) throws KeyStoreException;
 }
