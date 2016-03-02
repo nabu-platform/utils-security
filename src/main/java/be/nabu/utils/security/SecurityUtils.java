@@ -57,6 +57,7 @@ import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
 
 import be.nabu.utils.codec.TranscoderUtils;
+import be.nabu.utils.codec.impl.Base64Decoder;
 import be.nabu.utils.codec.impl.Base64Encoder;
 import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
@@ -247,12 +248,29 @@ public class SecurityUtils {
 		output.write(key.getEncoded());
 	}
 	
+	/**
+	 * Allows you to decode encoded content like keys, certificates,...
+	 * These decoded parts can then be given to for example parsePKCS8
+	 */
+	public static byte [] decode(String content) {
+		content = content.replaceAll("---.*[\n]*", "");
+		try {
+			return IOUtils.toBytes(TranscoderUtils.transcodeBytes(IOUtils.wrap(content.getBytes(), true), new Base64Decoder()));
+		}
+		catch(IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
+	
 	public static PublicKey parsePublic(KeyPairType type, byte [] container) throws InvalidKeySpecException, NoSuchAlgorithmException {
 		X509EncodedKeySpec spec = new X509EncodedKeySpec(container);
 		KeyFactory keyFactory = KeyFactory.getInstance(type.toString());
 		return keyFactory.generatePublic(spec);
 	}
 	
+	/**
+	 * This expects the decoded version
+	 */
 	public static KeyPair parsePKCS8(KeyPairType type, byte [] container) throws NoSuchAlgorithmException, InvalidKeySpecException {
 		KeyFactory keyFactory = KeyFactory.getInstance(type.toString());
 		PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(container);
