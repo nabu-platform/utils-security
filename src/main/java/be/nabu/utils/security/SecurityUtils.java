@@ -17,6 +17,7 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.Provider;
 import java.security.PublicKey;
@@ -445,4 +446,40 @@ public class SecurityUtils {
 		}
 	}
 	
+    public static boolean isSelfSigned(X509Certificate cert) throws CertificateException, NoSuchAlgorithmException, NoSuchProviderException {
+		try {
+			// try to verify certificate signature with its own public key
+			PublicKey key = cert.getPublicKey();
+			cert.verify(key);
+			return true;
+		}
+		catch (SignatureException sigEx) {
+			// invalid signature: not self-signed
+			return false;
+		}
+		catch (InvalidKeyException keyEx) {
+			// invalid key: not self-signed
+			return false;
+		}
+    }
+    
+	public static X509Certificate [] getRootCertificates(X509Certificate...certificates) throws CertificateException, NoSuchAlgorithmException, NoSuchProviderException {
+		List<X509Certificate> result = new ArrayList<X509Certificate>();
+		for (X509Certificate certificate : certificates) {
+			if (SecurityUtils.isSelfSigned(certificate)) {
+				result.add(certificate);
+			}
+		}
+		return result.toArray(new X509Certificate[result.size()]);
+	}
+	
+	public static X509Certificate [] getIntermediateCertificates(X509Certificate...certificates) throws CertificateException, NoSuchAlgorithmException, NoSuchProviderException {
+		List<X509Certificate> result = new ArrayList<X509Certificate>();
+		for (X509Certificate certificate : certificates) {
+			if (!SecurityUtils.isSelfSigned(certificate)) {
+				result.add(certificate);
+			}
+		}
+		return result.toArray(new X509Certificate[result.size()]);
+	}
 }

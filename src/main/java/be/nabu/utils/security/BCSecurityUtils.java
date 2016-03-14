@@ -497,6 +497,16 @@ public class BCSecurityUtils {
 		return signers;
 	}
 	
+	public static PKIXCertPathBuilderResult validateCertificateChain(X509Certificate [] chain, X509Certificate...certificates) throws GeneralSecurityException {
+		CertStore certStore = createCertificateStore(SecurityUtils.getIntermediateCertificates(certificates));
+		
+		// create a selector that specifies the starting certificate
+		X509CertSelector selector = new X509CertSelector(); 
+		selector.setCertificate(chain[0]);
+		
+		return createPKIXPath(selector, certStore, SecurityUtils.getRootCertificates(certificates));
+	}
+		
 	/**
 	 * The aliases must point to private keys
 	 * @throws GeneralSecurityException 
