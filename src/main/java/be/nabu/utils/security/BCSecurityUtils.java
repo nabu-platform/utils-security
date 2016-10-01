@@ -52,6 +52,9 @@ import javax.security.auth.x500.X500Principal;
 
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
+import org.bouncycastle.asn1.x509.BasicConstraints;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v1CertificateBuilder;
@@ -63,6 +66,7 @@ import org.bouncycastle.cert.jcajce.JcaX500NameUtil;
 import org.bouncycastle.cert.jcajce.JcaX509CRLHolder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
+import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.jcajce.JcaX509v1CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.cms.CMSCompressedDataParser;
@@ -221,7 +225,19 @@ public class BCSecurityUtils {
 	}
 	
 	public static X509Certificate generateSelfSignedCertificate(KeyPair pair, Date until, X500Principal issuer, X500Principal subject, SignatureType signatureType) throws CertificateException, IOException {
-		X509v1CertificateBuilder builder = new JcaX509v1CertificateBuilder(
+		// the critical difference between v1 and v3 certificates is that v3 can have extensions whereas v1 can't
+		// interestingly enough you _need_ extensions when signing an intermediate (http://unitstep.net/blog/2009/03/16/using-the-basic-constraints-extension-in-x509-v3-certificates-for-intermediate-cas/) 
+		// or you can get errors like: java.security.cert.CertPathValidatorException: Intermediate certificate lacks BasicConstraints
+		// for root CA's it depends on the system, most root CA's are identified by the fact that they signed themselves, but sometimes the constraints are required as well
+//		X509v1CertificateBuilder builder = new JcaX509v1CertificateBuilder(
+//			issuer,
+//			SecurityUtils.generateSerialId(),
+//			new Date(),
+//			until,
+//			subject,
+//			pair.getPublic()
+//		);
+		X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
 			issuer,
 			SecurityUtils.generateSerialId(),
 			new Date(),
@@ -229,13 +245,14 @@ public class BCSecurityUtils {
 			subject,
 			pair.getPublic()
 		);
-		
 		try {
+			builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(0))
+            	.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyCertSign | KeyUsage.cRLSign));
 			X509CertificateHolder holder = builder.build(getContentSigner(pair.getPrivate(), signatureType));
 			return getCertificate(holder);
 		}
 		catch (OperatorCreationException e) {
-			throw new IOException(e);
+			throw new RuntimeException(e);
 		}
 	}
 	
@@ -255,7 +272,7 @@ public class BCSecurityUtils {
 //		);
 		// so let's do it the JCA way
 		JcaPKCS10CertificationRequest pkcs10 = new JcaPKCS10CertificationRequest(csr);
-		X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
+		X509v1CertificateBuilder builder = new JcaX509v1CertificateBuilder(
 				issuer,
 				SecurityUtils.generateSerialId(),
 				new Date(),
@@ -265,6 +282,58 @@ public class BCSecurityUtils {
 		);
 
 		try {
+			X509CertificateHolder holder = builder.build(getContentSigner(privateKey, type));
+			return getCertificate(holder);
+		}
+		catch (OperatorCreationException e) {
+			throw new IOException(e);
+		}
+	}
+	
+	// example: https://github.com/joschi/cryptoworkshop-bouncycastle/blob/master/src/main/java/cwguide/JcaUtils.java
+	public static X509Certificate signPKCS10AsIntermediate(byte [] csr, Date until, X500Principal issuer, PrivateKey privateKey, SignatureType type, X509Certificate caCertificate) throws IOException, CertificateException, InvalidKeyException, NoSuchAlgorithmException {
+		JcaPKCS10CertificationRequest pkcs10 = new JcaPKCS10CertificationRequest(csr);
+		X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
+			issuer,
+			SecurityUtils.generateSerialId(),
+			new Date(),
+			until,
+			new X500Principal(pkcs10.getSubject().getEncoded()),
+			pkcs10.getPublicKey()
+		);
+
+		try {
+			JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
+			builder.addExtension(Extension.authorityKeyIdentifier, false, extUtils.createAuthorityKeyIdentifier(caCertificate))
+	            .addExtension(Extension.subjectKeyIdentifier, false, extUtils.createSubjectKeyIdentifier(pkcs10.getPublicKey()))
+	            .addExtension(Extension.basicConstraints, true, new BasicConstraints(0))
+            	.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyCertSign | KeyUsage.cRLSign));
+			X509CertificateHolder holder = builder.build(getContentSigner(privateKey, type));
+			return getCertificate(holder);
+		}
+		catch (OperatorCreationException e) {
+			throw new IOException(e);
+		}
+	}
+	
+	// TODO: not sure what the proper key usage would be for a "regular" entity
+	public static X509Certificate signPKCS10AsEntity(byte [] csr, Date until, X500Principal issuer, PrivateKey privateKey, SignatureType type, X509Certificate caCertificate) throws IOException, CertificateException, InvalidKeyException, NoSuchAlgorithmException {
+		JcaPKCS10CertificationRequest pkcs10 = new JcaPKCS10CertificationRequest(csr);
+		X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
+			issuer,
+			SecurityUtils.generateSerialId(),
+			new Date(),
+			until,
+			new X500Principal(pkcs10.getSubject().getEncoded()),
+			pkcs10.getPublicKey()
+		);
+
+		try {
+			JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
+			builder.addExtension(Extension.authorityKeyIdentifier, false, extUtils.createAuthorityKeyIdentifier(caCertificate))
+	            .addExtension(Extension.subjectKeyIdentifier, false, extUtils.createSubjectKeyIdentifier(pkcs10.getPublicKey()))
+	            .addExtension(Extension.basicConstraints, true, new BasicConstraints(false))
+            	.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
 			X509CertificateHolder holder = builder.build(getContentSigner(privateKey, type));
 			return getCertificate(holder);
 		}
