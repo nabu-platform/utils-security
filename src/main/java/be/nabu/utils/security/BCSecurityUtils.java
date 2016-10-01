@@ -225,8 +225,9 @@ public class BCSecurityUtils {
 	}
 	
 	public static X509Certificate generateSelfSignedCertificate(KeyPair pair, Date until, X500Principal issuer, X500Principal subject, SignatureType signatureType) throws CertificateException, IOException {
-		// the critical difference between v1 and v3 certificates is that v3 can have extensions whereas v1 can't
-		// interestingly enough you _need_ extensions when signing an intermediate (http://unitstep.net/blog/2009/03/16/using-the-basic-constraints-extension-in-x509-v3-certificates-for-intermediate-cas/) 
+		// the critical difference between v1 and v3 certificates is that v3 can have extensions whereas v1 can't (not entirely sure what v2's trick is...)
+		// interestingly enough you _need_ extensions when signing an intermediate
+		// http://unitstep.net/blog/2009/03/16/using-the-basic-constraints-extension-in-x509-v3-certificates-for-intermediate-cas/
 		// or you can get errors like: java.security.cert.CertPathValidatorException: Intermediate certificate lacks BasicConstraints
 		// for root CA's it depends on the system, most root CA's are identified by the fact that they signed themselves, but sometimes the constraints are required as well
 //		X509v1CertificateBuilder builder = new JcaX509v1CertificateBuilder(
