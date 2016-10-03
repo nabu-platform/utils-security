@@ -247,7 +247,7 @@ public class BCSecurityUtils {
 			pair.getPublic()
 		);
 		try {
-			builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(0))
+			builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(true))
             	.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyCertSign | KeyUsage.cRLSign));
 			X509CertificateHolder holder = builder.build(getContentSigner(pair.getPrivate(), signatureType));
 			return getCertificate(holder);
@@ -292,7 +292,10 @@ public class BCSecurityUtils {
 	}
 	
 	// example: https://github.com/joschi/cryptoworkshop-bouncycastle/blob/master/src/main/java/cwguide/JcaUtils.java
-	public static X509Certificate signPKCS10AsIntermediate(byte [] csr, Date until, X500Principal issuer, PrivateKey privateKey, SignatureType type, X509Certificate caCertificate) throws IOException, CertificateException, InvalidKeyException, NoSuchAlgorithmException {
+	// the path length indicates how many more intermediates may follow this one, if 0, it can only sign end entity certificates
+	// if not set, the path can go on indefinately
+	// http://stackoverflow.com/questions/6616470/certificates-basic-constraints-path-length
+	public static X509Certificate signPKCS10AsIntermediate(byte [] csr, Date until, X500Principal issuer, PrivateKey privateKey, SignatureType type, X509Certificate caCertificate, Integer pathLength) throws IOException, CertificateException, InvalidKeyException, NoSuchAlgorithmException {
 		JcaPKCS10CertificationRequest pkcs10 = new JcaPKCS10CertificationRequest(csr);
 		X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
 			issuer,
@@ -307,7 +310,7 @@ public class BCSecurityUtils {
 			JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
 			builder.addExtension(Extension.authorityKeyIdentifier, false, extUtils.createAuthorityKeyIdentifier(caCertificate))
 	            .addExtension(Extension.subjectKeyIdentifier, false, extUtils.createSubjectKeyIdentifier(pkcs10.getPublicKey()))
-	            .addExtension(Extension.basicConstraints, true, new BasicConstraints(0))
+	            .addExtension(Extension.basicConstraints, true, pathLength == null ? new BasicConstraints(true) : new BasicConstraints(pathLength))
             	.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyCertSign | KeyUsage.cRLSign));
 			X509CertificateHolder holder = builder.build(getContentSigner(privateKey, type));
 			return getCertificate(holder);
