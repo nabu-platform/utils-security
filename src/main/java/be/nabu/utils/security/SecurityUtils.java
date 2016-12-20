@@ -37,6 +37,7 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
@@ -481,5 +482,38 @@ public class SecurityUtils {
 			}
 		}
 		return result.toArray(new X509Certificate[result.size()]);
+	}
+	
+	public static List<X509Certificate> orderChain(List<X509Certificate> certificates) throws CertificateException, NoSuchAlgorithmException, NoSuchProviderException {
+		List<X509Certificate> result = new ArrayList<X509Certificate>();
+		X509Certificate[] rootCertificates = getRootCertificates(certificates.toArray(new X509Certificate[0]));
+		if (rootCertificates.length == 0) {
+			throw new IllegalArgumentException("No root certificate found");
+		}
+		else if (rootCertificates.length > 1) {
+			throw new IllegalArgumentException("Too many root certificates found: " + rootCertificates.length);
+		}
+		result.add(rootCertificates[0]);
+		int lastSize = result.size();
+		while (result.size() != certificates.size()) {
+			for (X509Certificate certificate : certificates) {
+				if (certificate.equals(rootCertificates[0])) {
+					continue;
+				}
+				try {
+					certificate.verify(result.get(result.size() - 1).getPublicKey());
+					result.add(certificate);
+				}
+				catch (Exception e) {
+					// ignore
+				}
+			}
+			if (result.size() == lastSize) {
+				throw new IllegalArgumentException("Broken chain");
+			}
+			lastSize = result.size();
+		}
+		Collections.reverse(result);
+		return result;
 	}
 }

@@ -118,6 +118,7 @@ import org.bouncycastle.util.Selector;
 import org.bouncycastle.util.Store;
 
 import be.nabu.utils.codec.TranscoderUtils;
+import be.nabu.utils.codec.impl.Base64Decoder;
 import be.nabu.utils.codec.impl.Base64Encoder;
 import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
@@ -384,7 +385,44 @@ public class BCSecurityUtils {
 //		CMSSignedDataGenerator gen = new CMSSignedDataGenerator();
 //		gen.adds
 //	}
+	
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	public static List<X509Certificate> parsePKCS7Certificates(byte [] content) throws CertificateException, IOException, OperatorCreationException {
+		try {
+			if (content[0] == '-') {
+				String stringContent = new String(content);
+				stringContent = stringContent.replaceAll("(?s)[\\s]*-[-]+.*?CERTIFICATE[-]+-[\\s]*", "");
+				ReadableContainer<ByteBuffer> decoded = TranscoderUtils.transcodeBytes(IOUtils.wrap(stringContent.getBytes(), true), new Base64Decoder());
+				content = IOUtils.toBytes(decoded);
+			}
+			CMSSignedData data = new CMSSignedData(content);
+			Store certStore = data.getCertificates();
+			List<X509Certificate> result = new ArrayList<X509Certificate>();
 
+			SignerInformationStore signerInfos = data.getSignerInfos();
+			Collection<SignerInformation> signers = signerInfos.getSigners();
+			// pkcs7 is commonly used without actual content and no signer infos but only certificates and/or crls
+			if (signers.isEmpty()) {
+				Collection<X509CertificateHolder> matches = certStore.getMatches(null);
+				for (X509CertificateHolder holder : matches) {
+					result.add(new JcaX509CertificateConverter().setProvider("BC").getCertificate(holder));
+				}
+			}
+			else {
+				for (SignerInformation signer : signers) {
+					Collection<X509CertificateHolder> matches = certStore.getMatches(signer.getSID());
+					for (X509CertificateHolder holder : matches) {
+						result.add(new JcaX509CertificateConverter().setProvider("BC").getCertificate(holder));
+					}
+				}
+			}
+			return result;
+		}
+		catch (CMSException e) {
+			throw new RuntimeException(e);
+		}
+	}
+	
 	/**
 	 * The method currently does not support attribute certificates, but it is supported by the generator so could be added easily
 	 * @param certStores
@@ -441,7 +479,6 @@ public class BCSecurityUtils {
 		}
 	}
 	
-	@SuppressWarnings("unchecked")
 	private static CertPath verify(CMSSignedData cmsSignedData, CertStore certsAndCRLs, X509Certificate...trustedRootCertificates) throws GeneralSecurityException, IOException {
 		try {
 			SignerInformationStore signers = cmsSignedData.getSignerInfos();
@@ -462,7 +499,7 @@ public class BCSecurityUtils {
 		}
 	}
 	
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public static CertPath verify2(byte [] signatures, CertStore certsAndCRLs, X509Certificate...trustedRootCertificates) throws GeneralSecurityException {
 		try {
 //			CMSSignedData cmsSignedData = new CMSSignedData(IOUtils.toInputStream(signedData));
@@ -733,7 +770,6 @@ public class BCSecurityUtils {
 	 * You can only decrypt one of them with your private key so you need to pass along the serialId of your certificate to figure out the correct recipient
 	 * Note that not all recipient types support serialId selection!
 	 */
-	@SuppressWarnings("unchecked")
 	public static InputStream decrypt(InputStream input, PrivateKey privateKey, BigInteger serialId) throws GeneralSecurityException, IOException {
 		try {
 			CMSEnvelopedDataParser parser = new CMSEnvelopedDataParser(input);
@@ -762,7 +798,6 @@ public class BCSecurityUtils {
 		}
 	}
 	
-	@SuppressWarnings("unchecked")
 	public static InputStream decrypt(InputStream input, ManagedKeyStore managedKeyStore) throws GeneralSecurityException, IOException {
 		try {
 			KeyStoreHandler handler = new KeyStoreHandler(managedKeyStore.getKeyStore());
