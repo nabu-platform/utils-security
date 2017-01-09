@@ -391,7 +391,7 @@ public class BCSecurityUtils {
 		try {
 			if (content[0] == '-') {
 				String stringContent = new String(content);
-				stringContent = stringContent.replaceAll("(?s)[\\s]*-[-]+.*?CERTIFICATE[-]+-[\\s]*", "");
+				stringContent = stringContent.replaceAll("(?s)[\\s]*-[-]+.*?(BEGIN|END)[\\s\\w]*[-]+-[\\s]*", "");
 				ReadableContainer<ByteBuffer> decoded = TranscoderUtils.transcodeBytes(IOUtils.wrap(stringContent.getBytes(), true), new Base64Decoder());
 				content = IOUtils.toBytes(decoded);
 			}
