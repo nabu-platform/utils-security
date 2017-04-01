@@ -2,7 +2,8 @@ package be.nabu.utils.security;
 
 public enum StoreType {
 	JKS("JKS", null, "application/x-java-keystore"),
-	PKCS12("PKCS12", "BC", "application/x-pkcs12");
+	PKCS12("PKCS12", "BC", "application/x-pkcs12"),
+	JCEKS("JCEKS", null, "application/x-java-jceks");
 	
 	private String alias, provider, contentType;
 	
