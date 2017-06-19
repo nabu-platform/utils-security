@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Writer;
 import java.math.BigInteger;
+import java.net.IDN;
 import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.security.InvalidKeyException;
@@ -302,6 +303,11 @@ public class SecurityUtils {
 	
 	public static Set<String> getAlgorithms(ServiceType type) {
 		return Security.getAlgorithms(type.getName());
+	}
+	
+	// formatted according to http://www.ietf.org/rfc/rfc3490.txt
+	public static String encodeAce(String domain) {
+		return IDN.toASCII(domain.trim()).toLowerCase();
 	}
 	
 	public static X500Principal createX500Principal(String commonName, String organisation, String organisationalUnit, String locality, String state, String country) {

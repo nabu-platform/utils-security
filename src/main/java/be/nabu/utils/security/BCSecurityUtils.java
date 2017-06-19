@@ -50,10 +50,14 @@ import java.util.Map;
 
 import javax.security.auth.x500.X500Principal;
 
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.ExtensionsGenerator;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
@@ -169,11 +173,21 @@ public class BCSecurityUtils {
 //		return IOUtils.wrap(request.getEncoded(), true);
 //	}
 	
-	public static byte[] generatePKCS10(KeyPair pair, SignatureType type, X500Principal subject) throws IOException {
+	public static byte[] generatePKCS10(KeyPair pair, SignatureType type, X500Principal subject, String...alternateDomains) throws IOException {
 		PKCS10CertificationRequestBuilder builder = new JcaPKCS10CertificationRequestBuilder(
 			subject,
 			pair.getPublic()
 		);
+		if (alternateDomains != null && alternateDomains.length > 0) {
+			GeneralName[] names = new GeneralName[alternateDomains.length];
+			for (int i = 0; i < alternateDomains.length; i++) {
+				names[i] = new GeneralName(GeneralName.dNSName, alternateDomains[i]);
+			}
+			GeneralNames subjectAltName = new GeneralNames(names);
+			ExtensionsGenerator extensionsGenerator = new ExtensionsGenerator();
+			extensionsGenerator.addExtension(Extension.subjectAlternativeName, false, subjectAltName);
+			builder.addAttribute(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extensionsGenerator.generate());
+		}
 //		builder.addAttribute(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extensions.generate()); 
 		AlgorithmIdentifier sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder().find(type.toString());
 		AlgorithmIdentifier digAlgId = new DefaultDigestAlgorithmIdentifierFinder().find(sigAlgId);
