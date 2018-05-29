@@ -1,5 +1,6 @@
 package be.nabu.utils.security;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -59,6 +60,8 @@ import javax.net.ssl.X509KeyManager;
 import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
 
+import org.mindrot.jbcrypt.BCrypt;
+
 import be.nabu.utils.codec.TranscoderUtils;
 import be.nabu.utils.codec.impl.Base64Decoder;
 import be.nabu.utils.codec.impl.Base64Encoder;
@@ -67,6 +70,7 @@ import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.Container;
 import be.nabu.utils.io.api.ReadableContainer;
 import be.nabu.utils.io.api.WritableContainer;
+import be.nabu.utils.io.containers.chars.HexReadableCharContainer;
 
 public class SecurityUtils {
 	
@@ -392,6 +396,39 @@ public class SecurityUtils {
 		while ((read = dataToVerify.read(content)) > 0)
 			signature.update(content, 0, read);
 		return signature.verify(signatureToVerify);
+	}
+	
+	// 12 rounds already takes on average 300ms for one calculation on an i7...
+	public static String bcryptHash(String string, Integer rounds) {
+		if (rounds == null) {
+			rounds = 12;
+		}
+		return BCrypt.hashpw(string, BCrypt.gensalt(rounds));
+	}
+	
+	public static boolean bcryptCheck(String string, String hash) {
+		return BCrypt.checkpw(string, hash);
+	}
+	
+	public static String hash(String string, DigestAlgorithm algorithm) throws NoSuchAlgorithmException, IOException {
+		if (algorithm == DigestAlgorithm.BCRYPT) {
+			return bcryptHash(string, null);
+		}
+		else {
+			byte[] digest = digest(new ByteArrayInputStream(string.getBytes(Charset.forName("UTF-8"))), algorithm);
+			return IOUtils.toString(new HexReadableCharContainer(IOUtils.wrap(digest, true)));
+		}
+	}
+	
+	public static boolean check(String string, String hashed, DigestAlgorithm algorithm) throws NoSuchAlgorithmException, IOException {
+		if (algorithm == DigestAlgorithm.BCRYPT) {
+			return bcryptCheck(string, hashed);
+		}
+		else {
+			byte[] digest = digest(new ByteArrayInputStream(string.getBytes(Charset.forName("UTF-8"))), algorithm);
+			String result = IOUtils.toString(new HexReadableCharContainer(IOUtils.wrap(digest, true)));
+			return hashed.equals(result);
+		}
 	}
 	
 	public static byte [] digest(InputStream input, DigestAlgorithm algorithm) throws NoSuchAlgorithmException, IOException {

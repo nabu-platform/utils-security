@@ -10,7 +10,11 @@ public enum DigestAlgorithm {
 	GOST3411("1.2.643.2.2.9", "GOST-3411"),
 	RIPEMD160("1.3.36.3.2.1", "RIPEMD-160"),
 	RIPEMD128("1.3.36.3.2.2", "RIPEMD-128"),
-	RIPEMD256("1.3.36.3.2.3", "RIPEMD-256")
+	RIPEMD256("1.3.36.3.2.3", "RIPEMD-256"),
+	// bcrypt does not have an official oid? can add BCRYPT13 later on if we need more rounds
+	BCRYPT("bcrypt", "BCRYPT")
+	// should add support for PBKDF2 as it is fips compliant (possibly only with certain combinations)
+	// can use same principle as bcrypt to store everything in the resulting password: https://howtodoinjava.com/security/how-to-generate-secure-password-hash-md5-sha-pbkdf2-bcrypt-examples/#PBKDF2WithHmacSHA1
 	;
 	
 	private String oid;
