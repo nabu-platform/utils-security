@@ -1,5 +1,6 @@
 package be.nabu.utils.security;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -38,6 +39,7 @@ import java.security.cert.TrustAnchor;
 import java.security.cert.X509CRL;
 import java.security.cert.X509CertSelector;
 import java.security.cert.X509Certificate;
+import java.security.interfaces.RSAPublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPublicKeySpec;
 import java.util.ArrayList;
@@ -103,7 +105,17 @@ import org.bouncycastle.crypto.params.RSAKeyParameters;
 import org.bouncycastle.crypto.util.PrivateKeyFactory;
 import org.bouncycastle.crypto.util.PublicKeyFactory;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.MiscPEMGenerator;
+import org.bouncycastle.openssl.PEMDecryptorProvider;
+import org.bouncycastle.openssl.PEMEncryptedKeyPair;
+import org.bouncycastle.openssl.PEMEncryptor;
+import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
+import org.bouncycastle.openssl.PEMWriter;
+import org.bouncycastle.openssl.jcajce.JcaMiscPEMGenerator;
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
+import org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder;
+import org.bouncycastle.openssl.jcajce.JcePEMEncryptorBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.ContentVerifierProvider;
 import org.bouncycastle.operator.DefaultDigestAlgorithmIdentifierFinder;
@@ -120,6 +132,7 @@ import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequest;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
 import org.bouncycastle.util.Selector;
 import org.bouncycastle.util.Store;
+import org.bouncycastle.util.io.pem.PemWriter;
 
 import be.nabu.utils.codec.TranscoderUtils;
 import be.nabu.utils.codec.impl.Base64Decoder;
@@ -127,6 +140,7 @@ import be.nabu.utils.codec.impl.Base64Encoder;
 import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.ReadableContainer;
+import be.nabu.utils.io.api.WritableContainer;
 import be.nabu.utils.security.SecurityUtils.DigestGenerator;
 import be.nabu.utils.security.api.ManagedKeyStore;
 
@@ -219,6 +233,86 @@ public class BCSecurityUtils {
 		PEMParser parser = new PEMParser(csr);
 		try {
 			return (PKCS10CertificationRequest) parser.readObject();
+		}
+		finally {
+			parser.close();
+		}
+	}
+
+	public static KeyPair parseSSHKey(Reader csr, String password) throws IOException {
+		PEMEncryptedKeyPair keypair = (PEMEncryptedKeyPair) parsePem(csr);
+		PEMDecryptorProvider decryptor = new JcePEMDecryptorProviderBuilder().build(password == null ? new char[0] : password.toCharArray());
+		PEMKeyPair decryptedKeyPair = keypair.decryptKeyPair(decryptor);
+		return new JcaPEMKeyConverter().getKeyPair(decryptedKeyPair);
+	}
+
+	private static byte[] encodePublicKey(RSAPublicKey key) throws IOException {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		// encode the "ssh-rsa" string
+		byte[] sshrsa = new byte[] { 0, 0, 0, 7, 's', 's', 'h', '-', 'r', 's', 'a' };
+		out.write(sshrsa);
+		// encode the public exponent
+		BigInteger e = key.getPublicExponent();
+		byte[] data = e.toByteArray();
+		encodeUInt32(data.length, out);
+		out.write(data);
+		// encode the modulus
+		BigInteger m = key.getModulus();
+		data = m.toByteArray();
+		encodeUInt32(data.length, out);
+		out.write(data);
+		return out.toByteArray();
+	}
+
+	private static void encodeUInt32(int value, OutputStream out) throws IOException {
+		byte[] tmp = new byte[4];
+		tmp[0] = (byte) ((value >>> 24) & 0xff);
+		tmp[1] = (byte) ((value >>> 16) & 0xff);
+		tmp[2] = (byte) ((value >>> 8) & 0xff);
+		tmp[3] = (byte) (value & 0xff);
+		out.write(tmp);
+	}
+
+	public static void writeSSHKey(Writer writer, PublicKey key) throws IOException {
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		Base64Encoder transcoder = new Base64Encoder();
+		transcoder.setBytesPerLine(0);
+		WritableContainer<ByteBuffer> encoded = TranscoderUtils.wrapWritable(IOUtils.wrap(output), transcoder);
+		encoded.write(IOUtils.wrap(encodePublicKey((RSAPublicKey) key), true));
+		encoded.close();
+		// the fields in a protocol 2 public key are:
+		// <keytype> <key> [<comment>]
+		// a lot of systems will generate the username and hostname as comment, e.g. "alex@chaos" but it is optional
+		// the trailing linefeed is (presumably) not absolutely required but can be expected, especially when adding it to the authorized_keys file using the ">>" syntax
+		writer.write("ssh-rsa " + new String(output.toByteArray()) + "\n");
+	}
+	
+	public static void writeSSHKey(Writer writer, PrivateKey key, String password) throws IOException {
+		PemWriter pemWriter = new PemWriter(writer);
+		MiscPEMGenerator generator;
+		if (password != null) {
+			// the default algorithm for ssh keys (at least on this system)
+			PEMEncryptor build = new JcePEMEncryptorBuilder("AES-128-CBC").build(password == null ? new char[0] : password.toCharArray());
+			generator = new JcaMiscPEMGenerator(key, build);
+		}
+		else {
+			generator = new JcaMiscPEMGenerator(key);
+		}
+		pemWriter.writeObject(generator);
+		pemWriter.flush();
+	}
+	
+	public static void writePem(Writer writer, PublicKey key) throws IOException {
+		PemWriter pemWriter = new PemWriter(writer);
+		MiscPEMGenerator generator = new JcaMiscPEMGenerator(key);
+		pemWriter.writeObject(generator);
+		pemWriter.flush();
+	}
+	
+	public static Object parsePem(Reader csr) throws IOException {
+		PEMParser parser = new PEMParser(csr);
+		try {
+			return parser.readObject();
 		}
 		finally {
 			parser.close();
