@@ -9,6 +9,8 @@ import java.math.BigInteger;
 import java.net.IDN;
 import java.net.UnknownHostException;
 import java.nio.charset.Charset;
+import java.security.AlgorithmParameters;
+import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyFactory;
@@ -35,6 +37,8 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.InvalidParameterSpecException;
+import java.security.spec.KeySpec;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
@@ -48,6 +52,14 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.PBEParameterSpec;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -92,6 +104,65 @@ public class SecurityUtils {
 				return null;
 			}
 		};
+	}
+	
+	public static String pbeEncrypt(byte [] bytes, String password, PBEAlgorithm algorithm) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, IOException, IllegalBlockSizeException, BadPaddingException, InvalidParameterSpecException {
+		SecretKeyFactory factory = SecretKeyFactory.getInstance(algorithm.getAlgorithm());
+
+		// we generate a new salt for each encryption
+		byte [] salt = new byte[8];
+		new SecureRandom().nextBytes(salt);
+		
+		KeySpec keySpec = new PBEKeySpec(password.toCharArray());
+		SecretKey key = factory.generateSecret(keySpec);
+		Cipher encryptionCipher = Cipher.getInstance(algorithm.getAlgorithm());
+		encryptionCipher.init(Cipher.ENCRYPT_MODE, key, new PBEParameterSpec(salt, 1024));
+		
+		// we must store the parameters for the key in the resulting data as we need it to decrypt correctly
+		// for DES this is not necessary for AES it is
+		byte [] parameters = encryptionCipher.getParameters().getEncoded();
+		byte [] encrypted = encryptionCipher.doFinal(bytes);
+		byte [] encoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
+			IOUtils.wrap(encrypted, true), 
+			new Base64Encoder())
+		);
+		byte [] encodedParameters = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
+			IOUtils.wrap(parameters, true), 
+			new Base64Encoder())
+		);
+		return new String(encodedParameters, "ASCII") + "$" + new String(encoded, "ASCII");
+	}
+	public static byte [] pbeDecrypt(String encrypted, String password, PBEAlgorithm algorithm) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, IOException, IllegalBlockSizeException, BadPaddingException {
+		SecretKeyFactory factory = SecretKeyFactory.getInstance(algorithm.getAlgorithm());
+		KeySpec keySpec = new PBEKeySpec(password.toCharArray());
+		SecretKey key = factory.generateSecret(keySpec);
+		
+		// we want to extract the encoded parameters
+		int indexOf = encrypted.indexOf('$');
+		if (indexOf < 0) {
+			throw new IllegalArgumentException("Expecting an IV at the beginning of the encrypted data");
+		}
+		
+		String encodedParameters = encrypted.substring(0, indexOf);
+		encrypted = encrypted.substring(indexOf + 1);
+		
+		Cipher decryptionCipher = Cipher.getInstance(algorithm.getAlgorithm());
+
+		byte [] decoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
+			IOUtils.wrap(encrypted.getBytes("ASCII"), true), 
+			new Base64Decoder())
+		);
+		
+		byte [] parameters = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
+			IOUtils.wrap(encodedParameters.getBytes("ASCII"), true), 
+			new Base64Decoder())
+		);
+		
+		AlgorithmParameters algorithmParameters = AlgorithmParameters.getInstance(algorithm.getAlgorithm());
+		algorithmParameters.init(parameters);
+		
+		decryptionCipher.init(Cipher.DECRYPT_MODE, key, algorithmParameters);
+		return decryptionCipher.doFinal(decoded);
 	}
 	
 	/**
