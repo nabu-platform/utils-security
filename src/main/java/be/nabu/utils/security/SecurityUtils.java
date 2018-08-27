@@ -122,13 +122,17 @@ public class SecurityUtils {
 		// for DES this is not necessary for AES it is
 		byte [] parameters = encryptionCipher.getParameters().getEncoded();
 		byte [] encrypted = encryptionCipher.doFinal(bytes);
+		Base64Encoder transcoder = new Base64Encoder();
+		transcoder.setBytesPerLine(0);
 		byte [] encoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
 			IOUtils.wrap(encrypted, true), 
-			new Base64Encoder())
+			transcoder)
 		);
+		transcoder = new Base64Encoder();
+		transcoder.setBytesPerLine(0);
 		byte [] encodedParameters = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
 			IOUtils.wrap(parameters, true), 
-			new Base64Encoder())
+			transcoder)
 		);
 		return new String(encodedParameters, "ASCII") + "$" + new String(encoded, "ASCII");
 	}
