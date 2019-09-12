@@ -513,6 +513,14 @@ public class SecurityUtils {
 		return generator.getDigestsByOID().get(algorithm.getOID());
 	}
 	
+	public static String encodeDigest(byte [] digest) {
+		StringBuilder string = new StringBuilder();
+		for (int i = 0; i < digest.length; ++i) {
+			string.append(Integer.toHexString((digest[i] & 0xFF) | 0x100).substring(1,3));
+		}
+		return string.toString();
+	}
+	
 	public static class DigestGenerator implements WritableContainer<ByteBuffer> {
 
 		private Map<DigestAlgorithm, Container<ByteBuffer>> digested = new HashMap<DigestAlgorithm, Container<ByteBuffer>>();
