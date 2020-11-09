@@ -239,6 +239,11 @@ public class BCSecurityUtils {
 		}
 	}
 
+	public static KeyPair parseKeyPair(Reader csr) throws IOException {
+		PEMKeyPair decryptedKeyPair = (PEMKeyPair) parsePem(csr);
+		return new JcaPEMKeyConverter().getKeyPair(decryptedKeyPair);
+	}
+	
 	public static KeyPair parseSSHKey(Reader csr, String password) throws IOException {
 		PEMEncryptedKeyPair keypair = (PEMEncryptedKeyPair) parsePem(csr);
 		PEMDecryptorProvider decryptor = new JcePEMDecryptorProviderBuilder().build(password == null ? new char[0] : password.toCharArray());
