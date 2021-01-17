@@ -52,6 +52,7 @@ import java.util.Map;
 
 import javax.security.auth.x500.X500Principal;
 
+import org.bouncycastle.asn1.DERSequence;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
@@ -338,7 +339,7 @@ public class BCSecurityUtils {
 		return generateSelfSignedCertificate(pair, until, issuer, subject, SignatureType.SHA1WITHRSA);
 	}
 	
-	public static X509Certificate generateSelfSignedCertificate(KeyPair pair, Date until, X500Principal issuer, X500Principal subject, SignatureType signatureType) throws CertificateException, IOException {
+	public static X509Certificate generateSelfSignedCertificate(KeyPair pair, Date until, X500Principal issuer, X500Principal subject, SignatureType signatureType, String...alternativeNames) throws CertificateException, IOException {
 		// the critical difference between v1 and v3 certificates is that v3 can have extensions whereas v1 can't (not entirely sure what v2's trick is...)
 		// interestingly enough you _need_ extensions when signing an intermediate
 		// http://unitstep.net/blog/2009/03/16/using-the-basic-constraints-extension-in-x509-v3-certificates-for-intermediate-cas/
@@ -361,8 +362,40 @@ public class BCSecurityUtils {
 			pair.getPublic()
 		);
 		try {
+			if (alternativeNames == null || alternativeNames.length == 0) {
+				Map<String, String> parts = SecurityUtils.getParts(subject);
+				String string = parts.get("CN");
+				if (string != null) {
+					alternativeNames = new String[] { string };
+				}
+			}
+			// thanks to: https://stackoverflow.com/questions/44423005/can-somebody-help-me-to-implement-extension-subject-alternative-names-using-boun
+			List<GeneralName> altNames = new ArrayList<GeneralName>();
+			// for emails
+			String rfc822Regex = "(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])";
+			for (String alternativeName : alternativeNames) {
+				if (alternativeName.matches(rfc822Regex)) {
+					altNames.add(new GeneralName(GeneralName.rfc822Name, alternativeName));
+				}
+				// an ipv4
+				else if (alternativeName.matches("^[0-9.]+$")) {
+					altNames.add(new GeneralName(GeneralName.iPAddress, alternativeName));
+				}
+				// we assume its a domain name
+				else {
+					altNames.add(new GeneralName(GeneralName.dNSName, alternativeName));
+				}
+			}
 			builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(true))
             	.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyCertSign | KeyUsage.cRLSign));
+			
+			// according to rfc, the alternative names is now an important part of it all
+			// https://tools.ietf.org/html/rfc6125#section-5.7.3.1
+			// apparently from chrome 58 onwards, chrome no longer even checks the CN, making the SAN mandatory (even though the rfc does not specify that it should be mandatory...)
+			if (!altNames.isEmpty()) {
+				GeneralNames subjectAltNames = GeneralNames.getInstance(new DERSequence((GeneralName[]) altNames.toArray(new GeneralName[] {})));
+				builder.addExtension(Extension.subjectAlternativeName, false, subjectAltNames);
+			}
 			X509CertificateHolder holder = builder.build(getContentSigner(pair.getPrivate(), signatureType));
 			return getCertificate(holder);
 		}
