@@ -55,11 +55,13 @@ import java.util.zip.ZipOutputStream;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.Mac;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.PBEParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -387,6 +389,18 @@ public class SecurityUtils {
 	// formatted according to http://www.ietf.org/rfc/rfc3490.txt
 	public static String encodeAce(String domain) {
 		return IDN.toASCII(domain.trim()).toLowerCase();
+	}
+	
+	public static String encodeMac(byte[] key, InputStream content, String algorithm) throws NoSuchAlgorithmException, IllegalStateException, IOException, InvalidKeyException {
+		Mac mac = Mac.getInstance(algorithm);
+		SecretKeySpec secretKeySpec = new SecretKeySpec(key, algorithm);
+		mac.init(secretKeySpec);
+		byte [] bytes = new byte[102400];
+		int read = 0;
+		while ((read = content.read(bytes)) > 0) {
+			mac.update(bytes, 0, read);
+		}
+		return encodeDigest(mac.doFinal());
 	}
 	
 	public static X500Principal createX500Principal(String commonName, String organisation, String organisationalUnit, String locality, String state, String country) {
