@@ -108,7 +108,11 @@ public class SecurityUtils {
 		};
 	}
 	
-	public static String pbeEncrypt(byte [] bytes, String password, PBEAlgorithm algorithm) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, IOException, IllegalBlockSizeException, BadPaddingException, InvalidParameterSpecException {
+	public static String pbeEncrypt(byte [] bytes, String password, PBEAlgorithm algorithm) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, InvalidParameterSpecException, IOException {
+		return pbeEncrypt(bytes, password, algorithm, false);
+	}
+	
+	public static String pbeEncrypt(byte [] bytes, String password, PBEAlgorithm algorithm, boolean useBase64Url) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, IOException, IllegalBlockSizeException, BadPaddingException, InvalidParameterSpecException {
 		SecretKeyFactory factory = SecretKeyFactory.getInstance(algorithm.getAlgorithm());
 
 		// we generate a new salt for each encryption
@@ -125,12 +129,14 @@ public class SecurityUtils {
 		byte [] parameters = encryptionCipher.getParameters().getEncoded();
 		byte [] encrypted = encryptionCipher.doFinal(bytes);
 		Base64Encoder transcoder = new Base64Encoder();
+		transcoder.setUseBase64Url(useBase64Url);
 		transcoder.setBytesPerLine(0);
 		byte [] encoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
 			IOUtils.wrap(encrypted, true), 
 			transcoder)
 		);
 		transcoder = new Base64Encoder();
+		transcoder.setUseBase64Url(useBase64Url);
 		transcoder.setBytesPerLine(0);
 		byte [] encodedParameters = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
 			IOUtils.wrap(parameters, true), 
@@ -138,7 +144,12 @@ public class SecurityUtils {
 		);
 		return new String(encodedParameters, "ASCII") + "$" + new String(encoded, "ASCII");
 	}
-	public static byte [] pbeDecrypt(String encrypted, String password, PBEAlgorithm algorithm) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, IOException, IllegalBlockSizeException, BadPaddingException {
+	
+	public static byte [] pbeDecrypt(String encrypted, String password, PBEAlgorithm algorithm) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, IOException {
+		return pbeDecrypt(encrypted, password, algorithm, false);
+	}
+	
+	public static byte [] pbeDecrypt(String encrypted, String password, PBEAlgorithm algorithm, boolean useBase64Url) throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, IOException, IllegalBlockSizeException, BadPaddingException {
 		SecretKeyFactory factory = SecretKeyFactory.getInstance(algorithm.getAlgorithm());
 		KeySpec keySpec = new PBEKeySpec(password.toCharArray());
 		SecretKey key = factory.generateSecret(keySpec);
@@ -154,14 +165,17 @@ public class SecurityUtils {
 		
 		Cipher decryptionCipher = Cipher.getInstance(algorithm.getAlgorithm());
 
+		Base64Decoder transcoder = new Base64Decoder();
+		transcoder.setUseBase64Url(useBase64Url);
+		
 		byte [] decoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
 			IOUtils.wrap(encrypted.getBytes("ASCII"), true), 
-			new Base64Decoder())
+			transcoder)
 		);
 		
 		byte [] parameters = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
 			IOUtils.wrap(encodedParameters.getBytes("ASCII"), true), 
-			new Base64Decoder())
+			transcoder)
 		);
 		
 		AlgorithmParameters algorithmParameters = AlgorithmParameters.getInstance(algorithm.getAlgorithm());
@@ -395,6 +409,17 @@ public class SecurityUtils {
 		Mac mac = Mac.getInstance(algorithm);
 		SecretKeySpec secretKeySpec = new SecretKeySpec(key, algorithm);
 		mac.init(secretKeySpec);
+		byte [] bytes = new byte[102400];
+		int read = 0;
+		while ((read = content.read(bytes)) > 0) {
+			mac.update(bytes, 0, read);
+		}
+		return encodeDigest(mac.doFinal());
+	}
+	
+	public static String encodeMac(SecretKey key, InputStream content, String algorithm) throws NoSuchAlgorithmException, IllegalStateException, IOException, InvalidKeyException {
+		Mac mac = Mac.getInstance(algorithm);
+		mac.init(key);
 		byte [] bytes = new byte[102400];
 		int read = 0;
 		while ((read = content.read(bytes)) > 0) {
