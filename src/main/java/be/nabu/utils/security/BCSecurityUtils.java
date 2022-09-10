@@ -19,6 +19,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.SecureRandom;
 import java.security.Security;
 import java.security.SignatureException;
 import java.security.cert.CRL;
@@ -40,12 +41,17 @@ import java.security.cert.X509CRL;
 import java.security.cert.X509CertSelector;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.ECPoint;
+import java.security.spec.ECPublicKeySpec;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +59,8 @@ import java.util.Map;
 import javax.security.auth.x500.X500Principal;
 
 import org.bouncycastle.asn1.DERSequence;
+import org.bouncycastle.asn1.eac.ECDSAPublicKey;
+import org.bouncycastle.asn1.nist.NISTNamedCurves;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
@@ -63,6 +71,7 @@ import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
+import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v1CertificateBuilder;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
@@ -101,10 +110,15 @@ import org.bouncycastle.cms.jcajce.JceKeyTransEnvelopedRecipient;
 import org.bouncycastle.cms.jcajce.JceKeyTransRecipientInfoGenerator;
 import org.bouncycastle.cms.jcajce.ZlibCompressor;
 import org.bouncycastle.cms.jcajce.ZlibExpanderProvider;
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
+import org.bouncycastle.crypto.KeyGenerationParameters;
+import org.bouncycastle.crypto.generators.ECKeyPairGenerator;
 import org.bouncycastle.crypto.params.AsymmetricKeyParameter;
 import org.bouncycastle.crypto.params.RSAKeyParameters;
 import org.bouncycastle.crypto.util.PrivateKeyFactory;
+import org.bouncycastle.crypto.util.PrivateKeyInfoFactory;
 import org.bouncycastle.crypto.util.PublicKeyFactory;
+import org.bouncycastle.crypto.util.SubjectPublicKeyInfoFactory;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.MiscPEMGenerator;
 import org.bouncycastle.openssl.PEMDecryptorProvider;
@@ -113,6 +127,7 @@ import org.bouncycastle.openssl.PEMEncryptor;
 import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.PEMWriter;
+
 import org.bouncycastle.openssl.jcajce.JcaMiscPEMGenerator;
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder;
@@ -985,5 +1000,87 @@ public class BCSecurityUtils {
 		CMSTypedStream typedStream = recipient.getContentStream(new JceKeyTransEnvelopedRecipient(privateKey).setProvider("BC"));
 		return typedStream.getContentStream();
 	}
+	
+	// interesting for JWK reasons
+	// n is the modulus, e is the exponent
+	public static PublicKey createRSAKey(BigInteger publicExponent, BigInteger modulus) throws NoSuchAlgorithmException, IOException, InvalidKeySpecException {
+		SubjectPublicKeyInfo info = SubjectPublicKeyInfoFactory.createSubjectPublicKeyInfo(new RSAKeyParameters(false, modulus, publicExponent));
+		X509EncodedKeySpec spec = new X509EncodedKeySpec(info.getEncoded());
+		KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+		return keyFactory.generatePublic(spec);
+	}
+	
+	public final static Map<String, String> SUPPORTED_CURVES = new HashMap<String, String>();
+    public final static Map<String, String> NIST_CURVES_NAMES = new HashMap<String, String>();
+ 
+    static {
+        NIST_CURVES_NAMES.put("256", "p-256");
+        NIST_CURVES_NAMES.put("384", "p-384");
+        NIST_CURVES_NAMES.put("521", "p-521");
+ 
+        SUPPORTED_CURVES.put("256", "nistp256");
+        SUPPORTED_CURVES.put("384", "nistp384");
+        SUPPORTED_CURVES.put("521", "nistp521");
+    }
+	
+	public static PublicKey createEllipticKey(ECType type, BigInteger x, BigInteger y) throws NoSuchAlgorithmException, InvalidKeySpecException {
+		ECPoint point = new ECPoint(x, y);
+		ECPublicKeySpec publicKeySpec = new ECPublicKeySpec(point, type.getECSpecification());
+		KeyFactory keyFactory = KeyFactory.getInstance("ECDSA");
+		return keyFactory.generatePublic(publicKeySpec);
+	}
+	
+	public static PublicKey createJWKPublicKey(Map<String, String> jwk) throws UnsupportedEncodingException, IOException, NoSuchAlgorithmException, InvalidKeySpecException {
+		String keyType = jwk.get("kty");
+		if ("RSA".equalsIgnoreCase(keyType)) {
+			Base64Decoder transcoder = new Base64Decoder();
+			transcoder.setUseBase64Url(true);
+			
+			byte[] bytes = IOUtils.toBytes(TranscoderUtils.transcodeBytes(IOUtils.wrap(jwk.get("e").getBytes("ASCII"), true), transcoder));
+			BigInteger publicExponent = new BigInteger(1, bytes);
+			
+			transcoder = new Base64Decoder();
+			transcoder.setUseBase64Url(true);
+			bytes = IOUtils.toBytes(TranscoderUtils.transcodeBytes(IOUtils.wrap(jwk.get("n").getBytes("ASCII"), true), transcoder));
+			BigInteger modulus = new BigInteger(1, bytes);
+			return createRSAKey(publicExponent, modulus);
+		}
+		else if ("EC".equalsIgnoreCase(keyType)) {
+			ECType ecType = ECType.valueOf(jwk.get("alg"));
+			if (ecType == null) {
+				throw new IllegalArgumentException("Could not resolve algorithm: " + jwk.get("alg"));
+			}
+			Base64Decoder transcoder = new Base64Decoder();
+			transcoder.setUseBase64Url(true);
+			
+			byte[] bytes = IOUtils.toBytes(TranscoderUtils.transcodeBytes(IOUtils.wrap(jwk.get("x").getBytes("ASCII"), true), transcoder));
+			BigInteger x = new BigInteger(1, bytes);
+			
+			transcoder = new Base64Decoder();
+			transcoder.setUseBase64Url(true);
+			bytes = IOUtils.toBytes(TranscoderUtils.transcodeBytes(IOUtils.wrap(jwk.get("y").getBytes("ASCII"), true), transcoder));
+			BigInteger y = new BigInteger(1, bytes);
+			
+			return createEllipticKey(ecType, x, y);
+		}
+		throw new IllegalArgumentException("Key type not supported: " + keyType);
+	}
+	
+//	public static void generateEllipticCurveKeyPair() {	
+//		ECKeyPairGenerator gen = new ECKeyPairGenerator();
+//		SecureRandom secureRandom = new SecureRandom();
+//		KeyGenerationParameters keyGenParam = new KeyGenerationParameters(secureRandom, keySize);
+//		gen.init(keyGenParam);
+//		AsymmetricCipherKeyPair keyPair = gen.generateKeyPair();
+//		// convert to java?
+//	}
 
+	private static KeyPair bcKeypairToKeypair(AsymmetricCipherKeyPair keypair) throws IOException, NoSuchAlgorithmException, InvalidKeySpecException {
+		byte[] pkcs8Encoded = PrivateKeyInfoFactory.createPrivateKeyInfo(keypair.getPrivate()).getEncoded();
+	    PKCS8EncodedKeySpec pkcs8KeySpec = new PKCS8EncodedKeySpec(pkcs8Encoded);
+	    byte[] spkiEncoded = SubjectPublicKeyInfoFactory.createSubjectPublicKeyInfo(keypair.getPublic()).getEncoded();
+	    X509EncodedKeySpec spkiKeySpec = new X509EncodedKeySpec(spkiEncoded);
+	    KeyFactory keyFac = KeyFactory.getInstance("RSA");
+	    return new KeyPair(keyFac.generatePublic(spkiKeySpec), keyFac.generatePrivate(pkcs8KeySpec));
+	}
 }

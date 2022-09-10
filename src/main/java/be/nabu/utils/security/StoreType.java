@@ -4,6 +4,9 @@ public enum StoreType {
 	JKS("JKS", null, "application/x-java-keystore"),
 	PKCS12("PKCS12", "BC", "application/x-pkcs12"),
 	JCEKS("JCEKS", null, "application/x-java-jceks");
+	// we store it in a jks store
+	// forgot that jwk does not have certs in general, just keys
+//	JWK("JKS", null, "application/jwk+json");
 	
 	private String alias, provider, contentType;
 	
