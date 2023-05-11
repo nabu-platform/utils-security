@@ -73,8 +73,19 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509KeyManager;
 import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
+import javax.xml.crypto.MarshalException;
+import javax.xml.crypto.dom.DOMStructure;
+import javax.xml.crypto.dsig.Reference;
+import javax.xml.crypto.dsig.XMLSignature;
+import javax.xml.crypto.dsig.XMLSignatureException;
+import javax.xml.crypto.dsig.XMLSignatureFactory;
+import javax.xml.crypto.dsig.dom.DOMValidateContext;
 
 import org.mindrot.jbcrypt.BCrypt;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 import be.nabu.utils.codec.TranscoderUtils;
 import be.nabu.utils.codec.impl.Base64Decoder;
@@ -500,6 +511,39 @@ public class SecurityUtils {
 		while ((read = dataToSign.read(content)) > 0)
 			signature.update(content, 0, read);
 		return signature;
+	}
+	
+	public static boolean verifyXml(Document doc, String pathToSignature, PublicKey key, SignatureType type) throws XMLSignatureException, MarshalException {
+		XMLSignatureFactory factory = XMLSignatureFactory.getInstance("DOM");
+		String[] parts = pathToSignature.replaceFirst("^[/]+$", "").split("/");
+		Element signatureElement = doc.getDocumentElement();
+		search: for (String part : parts) {
+			NodeList childNodes = signatureElement.getChildNodes();
+			for (int i = 0; i < childNodes.getLength(); i++) {
+				Node item = childNodes.item(i);
+				if (item instanceof Element && ((Element) item).getLocalName().equalsIgnoreCase(part)) {
+					signatureElement = (Element) item;
+					continue search;
+				}
+			}
+			throw new IllegalArgumentException("Could not resolve '" + part + "' of signature path '" + pathToSignature + "'");
+		}
+		DOMValidateContext validationContext = new DOMValidateContext(key, signatureElement);
+		// This property controls whether or not the digested Reference objects will cache the dereferenced content and pre-digested input for subsequent retrieval via the Reference.getDereferencedData and Reference.getDigestInputStream methods. The default value if not specified is Boolean.FALSE.
+//		validationContext.setProperty("javax.xml.crypto.dsig.cacheReference", true);
+		XMLSignature signature = factory.unmarshalXMLSignature(new DOMStructure(signatureElement));
+		if (signature.validate(validationContext)) {
+			// not sure if this is necessary?
+//			boolean signatureValid = signature.getSignatureValue().validate(validationContext);
+//			for (Object reference : signature.getSignedInfo().getReferences()) {
+//				boolean referenceValid = ((Reference) reference).validate(validationContext);
+//			}
+			return true;
+		}
+		else {
+			return false;
+		}
+		
 	}
 	
 	public static boolean verify(InputStream dataToVerify, byte [] signatureToVerify, PublicKey key, SignatureType type) throws SignatureException, InvalidKeyException, NoSuchAlgorithmException, IOException {

@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
+import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
 import java.math.BigInteger;
@@ -12,6 +13,7 @@ import java.nio.charset.Charset;
 import java.security.GeneralSecurityException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
+import java.security.Key;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyStoreException;
@@ -19,7 +21,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.security.SecureRandom;
 import java.security.Security;
 import java.security.SignatureException;
 import java.security.cert.CRL;
@@ -62,6 +63,7 @@ import org.bouncycastle.asn1.DERSequence;
 import org.bouncycastle.asn1.eac.ECDSAPublicKey;
 import org.bouncycastle.asn1.nist.NISTNamedCurves;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.BasicConstraints;
@@ -337,6 +339,27 @@ public class BCSecurityUtils {
 		}
 		finally {
 			parser.close();
+		}
+	}
+	
+	public static Key parseKeyPem(Reader pem) throws NoSuchAlgorithmException, InvalidKeySpecException, UnsupportedEncodingException, IOException {
+		java.lang.Object parsed = BCSecurityUtils.parsePem(pem);
+		if (parsed instanceof Key) {
+			return (Key) parsed;
+		}
+		else if (parsed instanceof KeyPair) {
+			return ((KeyPair) parsed).getPrivate();
+		}
+		else if (parsed instanceof PEMKeyPair) {
+//			bcKeypairToKeypair((PEMKeyPair) parsed);
+			PrivateKeyInfo privateKeyInfo = ((PEMKeyPair) parsed).getPrivateKeyInfo();
+			return new JcaPEMKeyConverter().getPrivateKey(privateKeyInfo);
+//			privateKeyInfo.parsePrivateKey().
+//			String algOid = privateKeyInfo.getPrivateKeyAlgorithm().getAlgorithm().getId();
+//	        return KeyFactory.getInstance(algOid).generatePrivate(spec);
+		}
+		else {
+			throw new IllegalArgumentException("Not a key: " + parsed);
 		}
 	}
 	
@@ -961,8 +984,7 @@ public class BCSecurityUtils {
 	
 	public static InputStream decrypt(InputStream input, ManagedKeyStore managedKeyStore) throws GeneralSecurityException, IOException {
 		try {
-			KeyStoreHandler handler = new KeyStoreHandler(managedKeyStore.getKeyStore());
-			List<String> aliases = handler.getPrivateKeyAliases();
+			List<String> aliases = managedKeyStore.getPrivateKeyAliases();
 			CMSEnvelopedDataParser parser = new CMSEnvelopedDataParser(input);
 			RecipientInformationStore recipients = parser.getRecipientInfos();
 			for (RecipientInformation recipient : (Collection<RecipientInformation>) recipients.getRecipients()) {

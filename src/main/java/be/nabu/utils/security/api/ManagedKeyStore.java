@@ -5,10 +5,16 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import javax.crypto.SecretKey;
 import javax.net.ssl.SSLContext;
 
+import be.nabu.utils.security.KeyStoreHandler;
 import be.nabu.utils.security.SSLContextType;
 
 public interface ManagedKeyStore {
@@ -25,8 +31,68 @@ public interface ManagedKeyStore {
 	public void rename(String oldAlias, String newAlias) throws KeyStoreException, IOException;
 	public void delete(String alias) throws KeyStoreException, IOException;
 
-	public KeyStore getKeyStore();
 	public void save() throws IOException;
-	
 	public SSLContext newContext(SSLContextType type) throws KeyStoreException;
+	
+	/**
+	 * Best effort return it as a keystore
+	 * Not possible for non-keystore based implementations
+	 */
+	public default KeyStore getKeyStore() {
+		return null;
+	}
+	
+	/**
+	 * List all aliases
+	 */
+	public default List<String> getAliases() throws KeyStoreException {
+		List<String> aliases = new ArrayList<String>();
+		KeyStore keyStore = getKeyStore();
+		if (keyStore != null) {
+			Enumeration<String> aliasList = keyStore.aliases();
+			while (aliasList.hasMoreElements()) {
+				aliases.add(aliasList.nextElement());
+			}
+		}
+		return aliases;
+	}
+	
+	/**
+	 * Get all the private key aliases
+	 */
+	public default List<String> getPrivateKeyAliases() throws KeyStoreException {
+		KeyStore keyStore = getKeyStore();
+		if (keyStore != null) {
+			KeyStoreHandler handler = new KeyStoreHandler(keyStore);
+			return handler.getPrivateKeyAliases();
+		}
+		return new ArrayList<String>();
+	}
+
+	/**
+	 * Get the entry type
+	 */
+	public default KeyStoreEntryType getEntryType(String alias) throws KeyStoreException {
+		KeyStore keyStore = getKeyStore();
+		if (keyStore != null) {
+			if (keyStore.entryInstanceOf(alias, KeyStore.TrustedCertificateEntry.class)) {
+				return KeyStoreEntryType.CERTIFICATE;
+			}
+			else if (keyStore.entryInstanceOf(alias, KeyStore.PrivateKeyEntry.class)) {
+				return KeyStoreEntryType.PRIVATE_KEY;
+			}
+			else if (keyStore.entryInstanceOf(alias, KeyStore.SecretKeyEntry.class)) {
+				return KeyStoreEntryType.SECRET_KEY;
+			}
+		}
+		return null;
+	}
+	
+	public default Map<String, X509Certificate> getCertificates() throws KeyStoreException {
+		KeyStore keyStore = getKeyStore();
+		if (keyStore != null) {
+			return new KeyStoreHandler(keyStore).getCertificates();
+		}
+		return new HashMap<String, X509Certificate>();
+	}
 }
