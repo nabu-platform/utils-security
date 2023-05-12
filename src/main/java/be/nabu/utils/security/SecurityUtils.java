@@ -49,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -73,13 +74,29 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509KeyManager;
 import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
+import javax.xml.crypto.Data;
 import javax.xml.crypto.MarshalException;
+import javax.xml.crypto.URIDereferencer;
+import javax.xml.crypto.URIReference;
+import javax.xml.crypto.URIReferenceException;
+import javax.xml.crypto.XMLCryptoContext;
 import javax.xml.crypto.dom.DOMStructure;
+import javax.xml.crypto.dsig.CanonicalizationMethod;
+import javax.xml.crypto.dsig.DigestMethod;
 import javax.xml.crypto.dsig.Reference;
+import javax.xml.crypto.dsig.SignatureMethod;
+import javax.xml.crypto.dsig.SignedInfo;
+import javax.xml.crypto.dsig.Transform;
 import javax.xml.crypto.dsig.XMLSignature;
 import javax.xml.crypto.dsig.XMLSignatureException;
 import javax.xml.crypto.dsig.XMLSignatureFactory;
+import javax.xml.crypto.dsig.dom.DOMSignContext;
 import javax.xml.crypto.dsig.dom.DOMValidateContext;
+import javax.xml.crypto.dsig.keyinfo.KeyInfo;
+import javax.xml.crypto.dsig.keyinfo.KeyInfoFactory;
+import javax.xml.crypto.dsig.keyinfo.X509Data;
+import javax.xml.crypto.dsig.spec.C14NMethodParameterSpec;
+import javax.xml.crypto.dsig.spec.TransformParameterSpec;
 
 import org.mindrot.jbcrypt.BCrypt;
 import org.w3c.dom.Document;
@@ -513,10 +530,67 @@ public class SecurityUtils {
 		return signature;
 	}
 	
-	public static boolean verifyXml(Document doc, String pathToSignature, PublicKey key, SignatureType type) throws XMLSignatureException, MarshalException {
+	public static void signXml(Element elementToSign, PrivateKey key, X509Certificate certificate, DigestMethod digestMethod, SignatureMethod signatureMethod) throws NoSuchAlgorithmException, InvalidAlgorithmParameterException, MarshalException, XMLSignatureException {
+		XMLSignatureFactory factory = XMLSignatureFactory.getInstance("DOM");
+		DigestMethod digestMethodInstance = factory.newDigestMethod(digestMethod == null ? DigestMethod.SHA1 : digestMethod.getAlgorithm(), null);
+		List<Transform> transforms = new ArrayList<Transform>();
+		transforms.add(factory.newTransform(Transform.ENVELOPED, (TransformParameterSpec) null));
+
+		// we want to sign the whole document, we indicate this with ""
+//		Reference reference = factory.newReference("", digestMethodInstance, transforms, null, null);
+		
+		String id = null;
+		if (elementToSign.hasAttribute("id")) {
+			id = elementToSign.getAttribute("id");
+			elementToSign.setIdAttribute("id", true);
+		}
+		else if (elementToSign.hasAttribute("Id")) {
+			id = elementToSign.getAttribute("Id");
+			elementToSign.setIdAttribute("Id", true);
+		}
+		else if (elementToSign.hasAttribute("ID")) {
+			id = elementToSign.getAttribute("ID");
+			elementToSign.setIdAttribute("ID", true);
+		}
+		if (id == null) {
+			id = "id" + UUID.randomUUID().toString().replace("-", "");
+			elementToSign.setAttribute("ID", id);
+			elementToSign.setIdAttribute("ID", true);
+		}
+		else {
+			elementToSign.setIdAttribute("ID", true);
+		}
+		Reference reference = factory.newReference("#" + id, digestMethodInstance, transforms, null, null);
+		
+		// create the signer information
+		CanonicalizationMethod canonicalizationMethod = factory.newCanonicalizationMethod(CanonicalizationMethod.INCLUSIVE, (C14NMethodParameterSpec) null);
+		SignatureMethod signatureMethodInstance = factory.newSignatureMethod(signatureMethod == null ? SignatureMethod.RSA_SHA1 : signatureMethod.getAlgorithm(), null);
+		SignedInfo signedInfo = factory.newSignedInfo(canonicalizationMethod, signatureMethodInstance, Arrays.asList(reference));
+		
+		// create the key info information
+		KeyInfoFactory keyInfoFactory = factory.getKeyInfoFactory();
+		List keyList = new ArrayList();
+		// not necessary
+//		keyList.add(certificate.getSubjectX500Principal().getName());
+		keyList.add(certificate);
+		X509Data x509Data = keyInfoFactory.newX509Data(keyList);
+		KeyInfo keyInfo = keyInfoFactory.newKeyInfo(Arrays.asList(x509Data));
+		
+		// create signature
+		DOMSignContext signatureContext = new DOMSignContext(key, elementToSign);
+		XMLSignature signature = factory.newXMLSignature(signedInfo, keyInfo);
+		
+		signature.sign(signatureContext);
+	}
+	
+	public static boolean verifyXml(Element element, PublicKey key) throws MarshalException {
+		return verifyXml(element, "Signature", key);
+	}
+	// the pathToSignature must point to the entire signature which contains a number of elements 
+	public static boolean verifyXml(Element element, String pathToSignature, PublicKey key) throws MarshalException {
 		XMLSignatureFactory factory = XMLSignatureFactory.getInstance("DOM");
 		String[] parts = pathToSignature.replaceFirst("^[/]+$", "").split("/");
-		Element signatureElement = doc.getDocumentElement();
+		Element signatureElement = element;
 		search: for (String part : parts) {
 			NodeList childNodes = signatureElement.getChildNodes();
 			for (int i = 0; i < childNodes.getLength(); i++) {
@@ -528,22 +602,41 @@ public class SecurityUtils {
 			}
 			throw new IllegalArgumentException("Could not resolve '" + part + "' of signature path '" + pathToSignature + "'");
 		}
-		DOMValidateContext validationContext = new DOMValidateContext(key, signatureElement);
+		DOMValidateContext validationContext = new DOMValidateContext(key, element);
+		// the signature contains a reference to the part it is signing
+		// the reference is resolved using an id attribute (expected way of writing is ID apparently though this seems flexible)
+		// at some point java made id attributes more strict: it must not only be named id (in its various forms) but it must also be defined as an id field in the accompanying definition of the file
+		// if however your definition is not correct (or simply not available), java can't deduce that it is an id field. we can explicitly set it as such
+		// note that currently we assume the element you pass in is the root of our signed content, otherwise we need to tweak this code to be recursive
+		if (element.hasAttribute("id")) {
+			element.setIdAttribute("id", true);	
+		}
+		else if (element.hasAttribute("Id")) {
+			element.setIdAttribute("Id", true);	
+		}
+		else if (element.hasAttribute("ID")) {
+			element.setIdAttribute("ID", true);
+		}
 		// This property controls whether or not the digested Reference objects will cache the dereferenced content and pre-digested input for subsequent retrieval via the Reference.getDereferencedData and Reference.getDigestInputStream methods. The default value if not specified is Boolean.FALSE.
 //		validationContext.setProperty("javax.xml.crypto.dsig.cacheReference", true);
 		XMLSignature signature = factory.unmarshalXMLSignature(new DOMStructure(signatureElement));
-		if (signature.validate(validationContext)) {
-			// not sure if this is necessary?
-//			boolean signatureValid = signature.getSignatureValue().validate(validationContext);
-//			for (Object reference : signature.getSignedInfo().getReferences()) {
-//				boolean referenceValid = ((Reference) reference).validate(validationContext);
-//			}
-			return true;
+		try {
+			if (signature.validate(validationContext)) {
+				// not sure if this is necessary?
+	//			boolean signatureValid = signature.getSignatureValue().validate(validationContext);
+	//			for (Object reference : signature.getSignedInfo().getReferences()) {
+	//				boolean referenceValid = ((Reference) reference).validate(validationContext);
+	//			}
+				return true;
+			}
+			else {
+				return false;
+			}
 		}
-		else {
+		// if the signature is simply wrong vs the cert (e.g. different bitsize), an exception is thrown
+		catch (XMLSignatureException e) {
 			return false;
 		}
-		
 	}
 	
 	public static boolean verify(InputStream dataToVerify, byte [] signatureToVerify, PublicKey key, SignatureType type) throws SignatureException, InvalidKeyException, NoSuchAlgorithmException, IOException {
