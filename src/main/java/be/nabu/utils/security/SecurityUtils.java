@@ -350,6 +350,13 @@ public class SecurityUtils {
 		return CertificateFactory.getInstance("X.509").generateCertPath(Arrays.asList(certificates));
 	}
 	
+	public static X509Certificate decodeCertificate(String content) throws IOException, CertificateException {
+		// replace potential BEGIN and END certificate stuff
+		content = content.replaceAll("---.*?---", "");
+		ReadableContainer<ByteBuffer> decoded = TranscoderUtils.transcodeBytes(IOUtils.wrap(content.getBytes(), true), new Base64Decoder());
+		return parseCertificate(IOUtils.toInputStream(decoded));
+	}
+	
 	public static void encodeCertificate(X509Certificate certificate, Writer output) throws CertificateEncodingException, IOException {
 		output.write("-----BEGIN CERTIFICATE-----\n".toCharArray());
 		ReadableContainer<ByteBuffer> encoded = TranscoderUtils.transcodeBytes(IOUtils.wrap(certificate.getEncoded(), true), new Base64Encoder());
