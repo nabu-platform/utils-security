@@ -593,6 +593,26 @@ public class SecurityUtils {
 	public static boolean verifyXml(Element element, PublicKey key) throws MarshalException {
 		return verifyXml(element, "Signature", key);
 	}
+	
+	private static void idify(Element element) {
+		if (element.hasAttribute("id")) {
+			element.setIdAttribute("id", true);	
+		}
+		else if (element.hasAttribute("Id")) {
+			element.setIdAttribute("Id", true);	
+		}
+		else if (element.hasAttribute("ID")) {
+			element.setIdAttribute("ID", true);
+		}
+		NodeList childNodes = element.getChildNodes();
+		for (int i = 0; i < childNodes.getLength(); i++) {
+			Node item = childNodes.item(i);
+			if (item instanceof Element) {
+				idify((Element) item);
+			}
+		}
+	}
+	
 	// the pathToSignature must point to the entire signature which contains a number of elements 
 	public static boolean verifyXml(Element element, String pathToSignature, PublicKey key) throws MarshalException {
 		XMLSignatureFactory factory = XMLSignatureFactory.getInstance("DOM");
@@ -615,15 +635,16 @@ public class SecurityUtils {
 		// at some point java made id attributes more strict: it must not only be named id (in its various forms) but it must also be defined as an id field in the accompanying definition of the file
 		// if however your definition is not correct (or simply not available), java can't deduce that it is an id field. we can explicitly set it as such
 		// note that currently we assume the element you pass in is the root of our signed content, otherwise we need to tweak this code to be recursive
-		if (element.hasAttribute("id")) {
-			element.setIdAttribute("id", true);	
-		}
-		else if (element.hasAttribute("Id")) {
-			element.setIdAttribute("Id", true);	
-		}
-		else if (element.hasAttribute("ID")) {
-			element.setIdAttribute("ID", true);
-		}
+//		if (element.hasAttribute("id")) {
+//			element.setIdAttribute("id", true);	
+//		}
+//		else if (element.hasAttribute("Id")) {
+//			element.setIdAttribute("Id", true);	
+//		}
+//		else if (element.hasAttribute("ID")) {
+//			element.setIdAttribute("ID", true);
+//		}
+		idify(element);
 		// This property controls whether or not the digested Reference objects will cache the dereferenced content and pre-digested input for subsequent retrieval via the Reference.getDereferencedData and Reference.getDigestInputStream methods. The default value if not specified is Boolean.FALSE.
 //		validationContext.setProperty("javax.xml.crypto.dsig.cacheReference", true);
 		XMLSignature signature = factory.unmarshalXMLSignature(new DOMStructure(signatureElement));
@@ -642,6 +663,7 @@ public class SecurityUtils {
 		}
 		// if the signature is simply wrong vs the cert (e.g. different bitsize), an exception is thrown
 		catch (XMLSignatureException e) {
+			e.printStackTrace();
 			return false;
 		}
 	}

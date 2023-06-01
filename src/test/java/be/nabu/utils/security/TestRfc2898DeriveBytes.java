@@ -15,6 +15,17 @@ public class TestRfc2898DeriveBytes extends TestCase {
 		String passwordToCheck = "024450";
 		String hashToCheck = "ANh5UMKk7oBae+Ftzc9RvcPSKUEkFnPy/2UbUL05lxR5ylrG3RzSB677IkWVFYzKQw==";
 		assertTrue(Rfc2898DeriveBytes.validateCryptoHash(hashToCheck, passwordToCheck));
+		
+		assertTrue(Rfc2898DeriveBytes.validateCryptoHash("AJwgdfzRCmGE6kSKK1zF5sc7aLJ1noCLJmPQEYKOVt0eciCs3Zn8tT15luhXkMBGqQ==", "450803"));
+		assertTrue(Rfc2898DeriveBytes.validateCryptoHash("AJWcXL5CFl7fQQ2rBcppXfWJR+P9gBNZjHow44HYcZfcQDyC35djXwYpTnmHInyzXA==", "573720"));
+		assertTrue(Rfc2898DeriveBytes.validateCryptoHash("ABzu2/DkMD0RXbQVqyFrIeFIUtNpsEO/vmEi3tP4Ew1rRqOBps+KgoN7bbPV1hdR6Q==", "619271"));
+		assertTrue(Rfc2898DeriveBytes.validateCryptoHash("AH6o+kSPz0tGjTTBFEN5L1b11PKHRDnxJTG6XfrX55qzPMoLDLaZf+0dEnNJB1JZFA==", "195818"));
+		
+		// some incorrect combinations
+		assertFalse(Rfc2898DeriveBytes.validateCryptoHash("AH6o+kSPz0tGjTTBFEN5L1b11PKHRDnxJTG6XfrX55qzPMoLDLaZf+0dEnNJB1JZFA==", "619271"));
+		assertFalse(Rfc2898DeriveBytes.validateCryptoHash("ABzu2/DkMD0RXbQVqyFrIeFIUtNpsEO/vmEi3tP4Ew1rRqOBps+KgoN7bbPV1hdR6Q==", "195818"));
+		assertFalse(Rfc2898DeriveBytes.validateCryptoHash("AJwgdfzRCmGE6kSKK1zF5sc7aLJ1noCLJmPQEYKOVt0eciCs3Zn8tT15luhXkMBGqQ==", "573720"));
+		assertFalse(Rfc2898DeriveBytes.validateCryptoHash("AJWcXL5CFl7fQQ2rBcppXfWJR+P9gBNZjHow44HYcZfcQDyC35djXwYpTnmHInyzXA==", "450803"));
 	}
 	
 	public void testGeneratedExample() throws InvalidKeyException, NoSuchAlgorithmException, IOException {
