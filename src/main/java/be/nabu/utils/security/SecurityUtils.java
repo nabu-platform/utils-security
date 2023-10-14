@@ -350,6 +350,38 @@ public class SecurityUtils {
 		return CertificateFactory.getInstance("X.509").generateCertPath(Arrays.asList(certificates));
 	}
 	
+	public static String encodeSecret(SecretKey secret, String password)  {
+		try {
+			byte[] encoded = secret.getEncoded();
+			// if it's passworded, we pbe encrypt it
+			if (password != null && !password.trim().isEmpty()) {
+				return pbeEncrypt(encoded, password, PBEAlgorithm.AES256);
+			}
+			// otherwise we base64 it
+			ReadableContainer<ByteBuffer> base64Encoded = TranscoderUtils.transcodeBytes(IOUtils.wrap(encoded, true), new Base64Encoder());
+			return new String(IOUtils.toBytes(base64Encoded), "ASCII");
+		}
+		catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+	
+	public static SecretKey decodeSecret(String content, String password) {
+		try {
+			byte[] bytes;
+			if (password != null && !password.trim().isEmpty()) {
+				bytes = pbeDecrypt(content, password, PBEAlgorithm.AES256);
+			}
+			else {
+				bytes = IOUtils.toBytes(TranscoderUtils.transcodeBytes(IOUtils.wrap(content.getBytes(), true), new Base64Decoder()));
+			}
+			return new SecretKeySpec(bytes, 0, bytes.length, "AES");
+		}
+		catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+	
 	public static X509Certificate decodeCertificate(String content) throws IOException, CertificateException {
 		// replace potential BEGIN and END certificate stuff
 		content = content.replaceAll("---.*?---", "");
