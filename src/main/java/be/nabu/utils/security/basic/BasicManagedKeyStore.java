@@ -10,6 +10,7 @@ import java.security.KeyStoreException;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.util.List;
 
 import javax.crypto.SecretKey;
 import javax.net.ssl.SSLContext;
@@ -112,10 +113,12 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 		persistance.delete(keystoreAlias, oldAlias);
 	}
 	
+	@Override
 	public String getPassword() {
 		return keystorePassword;
 	}
 	
+	@Override
 	public String getPassword(String alias) {
 		KeyStoreEntry keyStoreEntry = persistance.get(keystoreAlias, alias);
 		if (keyStoreEntry == null) {
@@ -227,18 +230,21 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 		try {
 			// get as a keystore, we use jceks to support secret keys
 			KeyStoreHandler handler = KeyStoreHandler.create(keystorePassword, StoreType.JCEKS);
-			for (String alias : persistance.getAliases(keystoreAlias)) {
-				KeyStoreEntry entry = persistance.get(keystoreAlias, alias);
-				switch (entry.getType()) {
-					case CERTIFICATE:
-						handler.set(alias, getCertificate(alias, entry));
-					break;
-					case PRIVATE_KEY:
-						handler.set(alias, getPrivateKey(alias, entry), getChain(alias, entry), decodePassword(entry.getPassword()));
-					break;
-					case SECRET_KEY:
-						handler.set(alias, getSecretKey(alias, entry), decodePassword(entry.getPassword()));
-					break;
+			List<String> aliases = persistance.getAliases(keystoreAlias);
+			if (aliases != null) {
+				for (String alias : aliases) {
+					KeyStoreEntry entry = persistance.get(keystoreAlias, alias);
+					switch (entry.getType()) {
+						case CERTIFICATE:
+							handler.set(alias, getCertificate(alias, entry));
+						break;
+						case PRIVATE_KEY:
+							handler.set(alias, getPrivateKey(alias, entry), getChain(alias, entry), decodePassword(entry.getPassword()));
+						break;
+						case SECRET_KEY:
+							handler.set(alias, getSecretKey(alias, entry), decodePassword(entry.getPassword()));
+						break;
+					}
 				}
 			}
 			return handler.getKeyStore();

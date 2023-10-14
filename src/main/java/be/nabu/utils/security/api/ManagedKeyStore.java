@@ -35,8 +35,22 @@ public interface ManagedKeyStore {
 	public SSLContext newContext(SSLContextType type) throws KeyStoreException;
 	
 	/**
+	 * Return the global password for this keystore (if any)
+	 */
+	public default String getPassword() {
+		throw new UnsupportedOperationException();
+	}
+	
+	/**
+	 * Return the password for a particular alias (if any)
+	 */
+	public default String getPassword(String alias) {
+		throw new UnsupportedOperationException();
+	}
+	
+	/**
 	 * Best effort return it as a keystore
-	 * Not possible for non-keystore based implementations
+	 * Potentially not possible for non-keystore based implementations
 	 */
 	public default KeyStore getKeyStore() {
 		return null;

@@ -384,7 +384,7 @@ public class SecurityUtils {
 	
 	public static X509Certificate decodeCertificate(String content) throws IOException, CertificateException {
 		// replace potential BEGIN and END certificate stuff
-		content = content.replaceAll("---.*?---", "");
+		content = content.trim().replaceAll("[-]{2,}.*?[-]{2,}", "");
 		ReadableContainer<ByteBuffer> decoded = TranscoderUtils.transcodeBytes(IOUtils.wrap(content.getBytes(), true), new Base64Decoder());
 		return parseCertificate(IOUtils.toInputStream(decoded));
 	}
