@@ -57,6 +57,13 @@ public interface ManagedKeyStore {
 	}
 	
 	/**
+	 * When building keyhandler contexts etc, it is easier to use an unsecured keystore, otherwise the private keys can not be accessed for SSL purposes
+	 */
+	public default KeyStore getUnsecuredKeyStore() {
+		return getKeyStore();
+	}
+	
+	/**
 	 * List all aliases
 	 */
 	public default List<String> getAliases() throws KeyStoreException {

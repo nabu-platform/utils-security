@@ -11,5 +11,7 @@ public interface KeyStorePersistanceManager {
 	public KeyStoreEntry get(@WebParam(name = "keystoreAlias") String keystoreAlias, @WebParam(name = "entryAlias") String entryAlias);
 	@WebResult(name = "aliases")
 	public List<String> getAliases(@WebParam(name = "keystoreAlias") String keystoreAlias);
+	@WebResult(name = "entries")
+	public List<NamedKeyStoreEntry> getAll(@WebParam(name = "keystoreAlias") String keystoreAlias);
 	public void delete(@WebParam(name = "keystoreAlias") String keystoreAlias, @WebParam(name = "entryAlias") String entryAlias);
 }

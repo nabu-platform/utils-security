@@ -53,7 +53,8 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 	
 	@Override
 	public void set(String alias, SecretKey secretKey, String password) {
-		String encoded = SecurityUtils.encodeSecret(secretKey, password);
+		// always encode it
+		String encoded = SecurityUtils.encodeSecret(secretKey, password == null ? keystorePassword : password);
 		persistance.set(keystoreAlias, alias, new KeyStoreEntryImpl(KeyStoreEntryType.SECRET_KEY, encoded.getBytes(Charset.forName("ASCII")), encodePassword(password)));
 	}
 	
@@ -91,7 +92,7 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 	@Override
 	public void set(String alias, PrivateKey privateKey, X509Certificate [] chain, String password) {
 		try {
-			KeyStoreHandler handler = KeyStoreHandler.create(password, StoreType.PKCS12);
+			KeyStoreHandler handler = KeyStoreHandler.create(password == null ? keystorePassword : password, StoreType.PKCS12);
 			handler.set(alias, privateKey, chain, password);
 			ByteArrayOutputStream output = new ByteArrayOutputStream();
 			handler.save(output, password);
@@ -136,7 +137,7 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 	public PrivateKey getPrivateKey(String alias) {
 		KeyStoreEntry keyStoreEntry = persistance.get(keystoreAlias, alias);
 		if (keyStoreEntry == null) {
-			throw new IllegalArgumentException("Could not find alias '" + alias + "' in keystore '" + keystoreAlias + "'");
+			return null;
 		}
 		return getPrivateKey(alias, keyStoreEntry);
 	}
@@ -147,7 +148,7 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 		}
 		try {
 			String decodedPassword = decodePassword(keyStoreEntry.getPassword());
-			KeyStoreHandler handler = KeyStoreHandler.load(new ByteArrayInputStream(keyStoreEntry.getContent()), decodedPassword, StoreType.PKCS12);
+			KeyStoreHandler handler = KeyStoreHandler.load(new ByteArrayInputStream(keyStoreEntry.getContent()), keyStoreEntry.getPassword() == null ? keystorePassword : decodedPassword, StoreType.PKCS12);
 			return handler.getPrivateKey(alias, decodedPassword);
 		}
 		catch (Exception e) {
@@ -159,7 +160,7 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 	public X509Certificate getCertificate(String alias) throws KeyStoreException {
 		KeyStoreEntry keyStoreEntry = persistance.get(keystoreAlias, alias);
 		if (keyStoreEntry == null) {
-			throw new IllegalArgumentException("Could not find alias '" + alias + "' in keystore '" + keystoreAlias + "'");
+			return null;
 		}
 		return getCertificate(alias, keyStoreEntry);
 	}
@@ -180,7 +181,7 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 	public SecretKey getSecretKey(String alias) throws KeyStoreException {
 		KeyStoreEntry keyStoreEntry = persistance.get(keystoreAlias, alias);
 		if (keyStoreEntry == null) {
-			throw new IllegalArgumentException("Could not find alias '" + alias + "' in keystore '" + keystoreAlias + "'");
+			return null;
 		}
 		return getSecretKey(alias, keyStoreEntry);
 	}
@@ -189,7 +190,7 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 		if (keyStoreEntry.getType() != KeyStoreEntryType.SECRET_KEY) {
 			throw new IllegalArgumentException("The alias '" + alias + "' is not a secret key");
 		}
-		return SecurityUtils.decodeSecret(new String(keyStoreEntry.getContent(), Charset.forName("UTF-8")), decodePassword(keyStoreEntry.getPassword()));
+		return SecurityUtils.decodeSecret(new String(keyStoreEntry.getContent(), Charset.forName("UTF-8")), keyStoreEntry.getPassword() == null ? keystorePassword : decodePassword(keyStoreEntry.getPassword()));
 	}
 	
 	@Override
@@ -212,7 +213,7 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 		}
 		try {
 			String decodedPassword = decodePassword(keyStoreEntry.getPassword());
-			KeyStoreHandler handler = KeyStoreHandler.load(new ByteArrayInputStream(keyStoreEntry.getContent()), decodedPassword, StoreType.PKCS12);
+			KeyStoreHandler handler = KeyStoreHandler.load(new ByteArrayInputStream(keyStoreEntry.getContent()), keyStoreEntry.getPassword() == null ? keystorePassword : decodedPassword, StoreType.PKCS12);
 			Certificate [] chain = handler.getKeyStore().getCertificateChain(alias);
 			X509Certificate [] certificates = new X509Certificate[chain.length];
 			for (int i = 0; i < chain.length; i++) {
@@ -230,10 +231,10 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 		try {
 			// get as a keystore, we use jceks to support secret keys
 			KeyStoreHandler handler = KeyStoreHandler.create(keystorePassword, StoreType.JCEKS);
-			List<String> aliases = persistance.getAliases(keystoreAlias);
-			if (aliases != null) {
-				for (String alias : aliases) {
-					KeyStoreEntry entry = persistance.get(keystoreAlias, alias);
+			List<NamedKeyStoreEntry> entries = persistance.getAll(keystoreAlias);
+			if (entries != null) {
+				for (NamedKeyStoreEntry entry : entries) {
+					String alias = entry.getAlias();
 					switch (entry.getType()) {
 						case CERTIFICATE:
 							handler.set(alias, getCertificate(alias, entry));
@@ -254,6 +255,34 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 		}
 	}
 	
+	@Override
+	public KeyStore getUnsecuredKeyStore() {
+		try {
+			// get as a keystore, we use jceks to support secret keys
+			KeyStoreHandler handler = KeyStoreHandler.create(keystorePassword, StoreType.JCEKS);
+			List<NamedKeyStoreEntry> entries = persistance.getAll(keystoreAlias);
+			if (entries != null) {
+				for (NamedKeyStoreEntry entry : entries) {
+					String alias = entry.getAlias();
+					switch (entry.getType()) {
+						case CERTIFICATE:
+							handler.set(alias, getCertificate(alias, entry));
+						break;
+						case PRIVATE_KEY:
+							handler.set(alias, getPrivateKey(alias, entry), getChain(alias, entry), null);
+						break;
+						case SECRET_KEY:
+							handler.set(alias, getSecretKey(alias, entry), null);
+						break;
+					}
+				}
+			}
+			return handler.getKeyStore();
+		}
+		catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
 
 	@Override
 	public SSLContext newContext(SSLContextType type) throws KeyStoreException {
