@@ -16,6 +16,8 @@ import javax.net.ssl.SSLContext;
 
 import be.nabu.utils.security.KeyStoreHandler;
 import be.nabu.utils.security.SSLContextType;
+import be.nabu.utils.security.basic.NamedKeyStoreEntry;
+import be.nabu.utils.security.impl.NamedKeyStoreEntryImpl;
 
 public interface ManagedKeyStore {
 	
@@ -116,4 +118,5 @@ public interface ManagedKeyStore {
 		}
 		return new HashMap<String, X509Certificate>();
 	}
+	
 }

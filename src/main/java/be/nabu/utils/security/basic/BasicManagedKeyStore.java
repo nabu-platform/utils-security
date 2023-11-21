@@ -95,7 +95,7 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 			KeyStoreHandler handler = KeyStoreHandler.create(password == null ? keystorePassword : password, StoreType.PKCS12);
 			handler.set(alias, privateKey, chain, password);
 			ByteArrayOutputStream output = new ByteArrayOutputStream();
-			handler.save(output, password);
+			handler.save(output, password == null ? keystorePassword : password);
 			output.close();
 			persistance.set(keystoreAlias, alias, new KeyStoreEntryImpl(KeyStoreEntryType.PRIVATE_KEY, output.toByteArray(), encodePassword(password)));
 		}
@@ -293,6 +293,14 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 		catch (Exception e) {
 			throw new KeyStoreException("Failed to create new context", e);
 		} 
+	}
+
+	public List<NamedKeyStoreEntry> getAll() {
+		return persistance.getAll(keystoreAlias);
+	}
+	
+	public KeyStorePersistanceManager getPersistance() {
+		return persistance;
 	}
 
 }
