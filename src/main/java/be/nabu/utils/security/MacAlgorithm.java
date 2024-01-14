@@ -1,5 +1,8 @@
 package be.nabu.utils.security;
 
 public enum MacAlgorithm {
-	HmacSHA256
+	HmacSHA1,
+	// default!
+	HmacSHA256,
+	HmacSHA512
 }

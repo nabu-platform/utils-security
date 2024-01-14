@@ -472,6 +472,18 @@ public class SecurityUtils {
 		return IDN.toASCII(domain.trim()).toLowerCase();
 	}
 	
+	public static byte[] mac(byte[] key, InputStream content, MacAlgorithm algorithm) throws NoSuchAlgorithmException, IllegalStateException, IOException, InvalidKeyException {
+		Mac mac = Mac.getInstance(algorithm.name());
+		SecretKeySpec secretKeySpec = new SecretKeySpec(key, algorithm.name());
+		mac.init(secretKeySpec);
+		byte [] bytes = new byte[102400];
+		int read = 0;
+		while ((read = content.read(bytes)) > 0) {
+			mac.update(bytes, 0, read);
+		}
+		return mac.doFinal();
+	}
+	
 	public static String encodeMac(byte[] key, InputStream content, String algorithm) throws NoSuchAlgorithmException, IllegalStateException, IOException, InvalidKeyException {
 		Mac mac = Mac.getInstance(algorithm);
 		SecretKeySpec secretKeySpec = new SecretKeySpec(key, algorithm);
