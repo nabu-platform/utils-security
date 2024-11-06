@@ -1,18 +1,15 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>be.nabu.utils</groupId>
 	<artifactId>utils-security</artifactId>
 	<packaging>jar</packaging>
-	<version>${be.nabu.utils-utils-security-version}</version>
+	<version>1.8-SNAPSHOT</version>
 	<name>utils-security</name>
-	
 	<parent>
 		<groupId>be.nabu</groupId>
 		<artifactId>core</artifactId>
 		<version>1.0-SNAPSHOT</version>
 	</parent>
-
 	<build>
 		<plugins>
 			<plugin>
@@ -25,27 +22,22 @@
 			</plugin>
 		</plugins>
 	</build>
-
 	<dependencies>
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcprov-jdk15on</artifactId>
 			<version>1.70</version>
 		</dependency>
-		<!-- <dependency> <groupId>org.bouncycastle</groupId> <artifactId>bcmail-jdk15on</artifactId> 
-			<version>1.50</version> </dependency> -->
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcpkix-jdk15on</artifactId>
 			<version>1.70</version>
 		</dependency>
-		<!-- https://mvnrepository.com/artifact/org.bouncycastle/bcutil-jdk15on -->
 		<dependency>
-		    <groupId>org.bouncycastle</groupId>
-		    <artifactId>bcutil-jdk15on</artifactId>
-		    <version>1.70</version>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcutil-jdk15on</artifactId>
+			<version>1.70</version>
 		</dependency>
-				
 		<dependency>
 			<groupId>be.nabu.utils</groupId>
 			<artifactId>utils-io</artifactId>
@@ -54,7 +46,6 @@
 			<groupId>be.nabu.utils</groupId>
 			<artifactId>utils-codec</artifactId>
 		</dependency>
-
 		<dependency>
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>
