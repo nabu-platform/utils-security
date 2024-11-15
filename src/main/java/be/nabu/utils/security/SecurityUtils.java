@@ -598,6 +598,16 @@ public class SecurityUtils {
 		return signature;
 	}
 	
+	public static String encode(Signature signature) throws SignatureException, IOException {
+		Base64Encoder transcoder = new Base64Encoder();
+		transcoder.setBytesPerLine(0);
+		byte [] encoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
+			IOUtils.wrap(signature.sign(), true), 
+			transcoder)
+		);
+		return new String(encoded, "ASCII");
+	}
+	
 	public static void signXml(Element elementToSign, PrivateKey key, X509Certificate certificate, DigestMethod digestMethod, SignatureMethod signatureMethod) throws NoSuchAlgorithmException, InvalidAlgorithmParameterException, MarshalException, XMLSignatureException {
 		XMLSignatureFactory factory = XMLSignatureFactory.getInstance("DOM");
 		DigestMethod digestMethodInstance = factory.newDigestMethod(digestMethod == null ? DigestMethod.SHA1 : digestMethod.getAlgorithm(), null);
@@ -727,6 +737,39 @@ public class SecurityUtils {
 			e.printStackTrace();
 			return false;
 		}
+	}
+	
+	/**
+	 * This verifies a digital signature and creates a hash in the process
+	 * The idea is that you want to use the hash for quick checking if something has changed
+	 */
+	public static String verifyAndHash(InputStream dataToVerify, String signatureToVerify, PublicKey key, SignatureType type, DigestAlgorithm algorithm) throws SignatureException, InvalidKeyException, NoSuchAlgorithmException, IOException {
+		Base64Decoder transcoder = new Base64Decoder();
+		// we don't want trailing "=" and special characters
+		transcoder.setUseBase64Url(true);
+		byte[] bytes = IOUtils.toBytes(TranscoderUtils.transcodeBytes(IOUtils.wrap(signatureToVerify.getBytes("ASCII"), true), transcoder));
+		Signature signature = Signature.getInstance(type.name());
+		signature.initVerify(key);
+		byte [] content = new byte[102400];
+		int read = 0;
+		MessageDigest digest = MessageDigest.getInstance(algorithm.getName());
+		while ((read = dataToVerify.read(content)) > 0) {
+			signature.update(content, 0, read);
+			digest.update(content, 0, read);
+		}
+		if (signature.verify(bytes)) {
+			byte [] hash = digest.digest();
+			return encodeDigest(hash);
+		}
+		return null;
+	}
+	
+	public static boolean verify(InputStream dataToVerify, String signatureToVerify, PublicKey key, SignatureType type) throws SignatureException, InvalidKeyException, NoSuchAlgorithmException, IOException {
+		Base64Decoder transcoder = new Base64Decoder();
+		// we don't want trailing "=" and special characters
+		transcoder.setUseBase64Url(true);
+		byte[] bytes = IOUtils.toBytes(TranscoderUtils.transcodeBytes(IOUtils.wrap(signatureToVerify.getBytes("ASCII"), true), transcoder));
+		return verify(dataToVerify, bytes, key, type);
 	}
 	
 	public static boolean verify(InputStream dataToVerify, byte [] signatureToVerify, PublicKey key, SignatureType type) throws SignatureException, InvalidKeyException, NoSuchAlgorithmException, IOException {
