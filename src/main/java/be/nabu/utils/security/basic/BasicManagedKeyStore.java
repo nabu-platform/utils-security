@@ -161,7 +161,7 @@ public class BasicManagedKeyStore implements ManagedKeyStore {
 
 	private PrivateKey getPrivateKey(String alias, KeyStoreEntry keyStoreEntry) {
 		if (keyStoreEntry.getType() != KeyStoreEntryType.PRIVATE_KEY) {
-			throw new IllegalArgumentException("The alias '" + alias + "' is not a private key");
+			throw new IllegalArgumentException("The alias '" + alias + "' is not a private key but a " + keyStoreEntry.getType() + " [" + keyStoreEntry + "]");
 		}
 		try {
 			String decodedPassword = decodePassword(keyStoreEntry.getPassword());
