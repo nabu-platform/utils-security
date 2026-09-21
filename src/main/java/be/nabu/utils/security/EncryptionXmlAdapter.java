@@ -43,6 +43,8 @@ public class EncryptionXmlAdapter extends XmlAdapter<String, String> {
 	
 	public static final String CONFIGURATION_CRYPT_KEY = "be.nabu.utils.security.crypt.key";
 	
+	private static final String ENCRYPTED_PREFIX = "${encrypted:";
+
 	// must be 8 bytes
 	private static byte[] salt = { (byte)0xc7, (byte)0x73, (byte)0x21, (byte)0x8c,
 			(byte)0x7e, (byte)0xc8, (byte)0xee, (byte)0x99 };
@@ -75,26 +77,33 @@ public class EncryptionXmlAdapter extends XmlAdapter<String, String> {
 	
 	@Override
 	public String marshal(String v) throws Exception {
-		byte [] encrypted = getEncryptionCipher().doFinal(v.getBytes("UTF-8"));
-		byte [] encoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
-			IOUtils.wrap(encrypted, true), 
-			new Base64Encoder())
-		);
-		return "${encrypted:" + new String(encoded, "ASCII") + "}";
+		String encrypted = SecurityUtils.pbeEncrypt(v.getBytes("UTF-8"), getPassword(), PBEAlgorithm.AES256);
+		return ENCRYPTED_PREFIX + encrypted + "}";
 	}
 
 	@Override
 	public String unmarshal(String v) throws Exception {
-		if (v.startsWith("${encrypted:") && v.endsWith("}")) {
-			byte [] decoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
-				IOUtils.wrap(v.substring(12, v.length() - 1).getBytes("ASCII"), true), 
-				new Base64Decoder())
-			);
-			byte [] decrypted = getDecryptionCipher().doFinal(decoded);
-			return new String(decrypted, "UTF-8");
+		if (v.startsWith(ENCRYPTED_PREFIX) && v.endsWith("}")) {
+			String encrypted = v.substring(ENCRYPTED_PREFIX.length(), v.length() - 1);
+			if (encrypted.indexOf('$') >= 0) {
+				return new String(SecurityUtils.pbeDecrypt(encrypted, getPassword(), PBEAlgorithm.AES256), "UTF-8");
+			}
+			else {
+				byte [] decoded = IOUtils.toBytes(TranscoderUtils.transcodeBytes(
+					IOUtils.wrap(encrypted.getBytes("ASCII"), true),
+					new Base64Decoder())
+				);
+				byte [] decrypted = getDecryptionCipher().doFinal(decoded);
+				return new String(decrypted, "UTF-8");
+			}
 		}
-		else
+		else {
 			return v;
+		}
+	}
+
+	private static String getPassword() {
+		return System.getProperty(CONFIGURATION_CRYPT_KEY, "changeit");
 	}
 
 }
